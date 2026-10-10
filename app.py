@@ -1,6 +1,6 @@
 from flask import Flask, request, render_template, jsonify, session
 from config import Config
-from models import db, Key, Script, Blacklist, Setting, User
+from models import db, Key, Script, Blacklist, Setting
 from utils.detector import is_browser
 from datetime import datetime, timedelta
 import random
@@ -38,10 +38,6 @@ def set_setting(key, value):
         db.session.add(Setting(key=key, value=value))
     db.session.commit()
 
-def get_host():
-    host = request.host.lower().split(":")[0]
-    return host
-
 def admin_required(f):
     @functools.wraps(f)
     def decorated_function(*args, **kwargs):
@@ -53,11 +49,7 @@ def admin_required(f):
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def domain_router(path):
-    host = get_host()
-    if "mineminyeehack" in host:
-        return "<h1>비정상적인 접근입니다.</h1>", 403
-
-    if path == "admin" or path.startswith("admin/") or "lua-scriptluarmor" in host:
+    if path == "admin" or path.startswith("admin/"):
         if not path.startswith("api/"):
             return render_template("admin/index.html")
 
@@ -65,7 +57,7 @@ def domain_router(path):
         return render_template("user/index.html")
     return render_template("user/index.html")
 
-# --- 파라미터 없는 스마트 로더 처리 ---
+# --- 파라미터 없는 스마트 로더 (루아머 스타일) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
     if is_browser(request):
@@ -130,7 +122,7 @@ pcall(function()
     {script.lua_code}
 end)"""
 
-# --- 관리자 로그인 API ---
+# --- 관리자 로그인 (마스터 계정 전용) ---
 @app.route('/api/admin/login', methods=['POST'])
 def admin_login():
     data = request.get_json() or {}
@@ -141,14 +133,13 @@ def admin_login():
         session['is_admin'] = True
         return jsonify({'success': True})
 
-    return jsonify({'success': False, 'message': '관리자 아이디 또는 비밀번호가 틀렸습니다.'}), 401
+    return jsonify({'success': False, 'message': '아이디 또는 비밀번호가 틀렸습니다.'}), 401
 
 @app.route('/api/admin/logout', methods=['POST'])
 def admin_logout():
     session.pop('is_admin', None)
     return jsonify({'success': True})
 
-# --- 관리자 대시보드 API들 ---
 @app.route('/api/admin/scripts/add', methods=['POST'])
 @admin_required
 def add_script_api():
@@ -255,65 +246,7 @@ def admin_save_settings():
 def admin_get_settings():
     return jsonify({"webhook_url": get_setting("discord_webhook_url"), "kill_switch": get_setting("kill_switch")})
 
-# --- 일반 유저 회원가입 / 로그인 / 세션 관리 API ---
-@app.route("/api/user/signup", methods=["POST"])
-def user_signup():
-    data = request.get_json() or {}
-    username = data.get("username", "").strip()
-    password = data.get("password", "").strip()
-
-    if not username or not password:
-        return jsonify({"success": False, "message": "아이디와 비밀번호를 모두 입력해주세요."}), 400
-
-    if User.query.filter_by(username=username).first():
-        return jsonify({"success": False, "message": "이미 존재하는 아이디입니다."}), 400
-
-    new_user = User(username=username, password=password)
-    db.session.add(new_user)
-    db.session.commit()
-    return jsonify({"success": True, "message": "회원가입 완료! 로그인해주세요."})
-
-@app.route("/api/user/login", methods=["POST"])
-def user_login():
-    data = request.get_json() or {}
-    username = data.get("username", "").strip()
-    password = data.get("password", "").strip()
-
-    user = User.query.filter_by(username=username, password=password).first()
-    if not user:
-        return jsonify({"success": False, "message": "아이디 또는 비밀번호가 일치하지 않습니다."}), 401
-
-    session['username'] = username
-
-    # 유저 로그인 시 전용 키가 없으면 자동 생성 및 매칭
-    existing_key = Key.query.filter_by(discord_id=f"User_{username}").first()
-    if not existing_key:
-        chars = string.ascii_uppercase + string.digits
-        random_part = ''.join(random.choices(chars, k=16))
-        key_str = f"luasafe-{random_part[:4]}-{random_part[4:8]}-{random_part[8:12]}"
-        expires = datetime.utcnow() + timedelta(days=30)
-        existing_key = Key(key=key_str, tier="Standard", status="ACTIVE", expires_at=expires, discord_id=f"User_{username}")
-        db.session.add(existing_key)
-        db.session.commit()
-
-    return jsonify({"success": True, "key": existing_key.key})
-
-@app.route("/api/user/check_session")
-def user_check_session():
-    username = session.get('username')
-    if not username:
-        return jsonify({"logged_in": False})
-    
-    # 세션에 저장된 유저의 전용 키 찾아 반환
-    key_obj = Key.query.filter_by(discord_id=f"User_{username}").first()
-    key_str = key_obj.key if key_obj else ""
-    return jsonify({"logged_in": True, "username": username, "key": key_str})
-
-@app.route("/api/user/logout", methods=["POST"])
-def user_logout():
-    session.pop('username', None)
-    return jsonify({"success": True})
-
+# --- 유저 키 조회 및 로더 발급 API ---
 @app.route("/api/user/scripts")
 def user_scripts():
     return jsonify([{"name": s.name, "description": s.description} for s in Script.query.filter_by(active=True).all()])
