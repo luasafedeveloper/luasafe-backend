@@ -22,10 +22,14 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# --- URL 라우터 ---
+# --- URL 라우터 (비밀 사장님 페이지와 일반 개발자 포털 분리) ---
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def domain_router(path):
+    # 사장님 전용 비밀 라이센스 발급 페이지 경로
+    if path == "master-secret-portal":
+        return render_template("admin/master.html")
+
     if path == "admin" or path.startswith("admin/"):
         if not path.startswith("api/"):
             return render_template("admin/index.html")
@@ -93,7 +97,7 @@ pcall(function()
     {script.lua_code}
 end)"""
 
-# --- 개발자 회원가입 (라이센스 코드 검증 필수) ---
+# --- 개발자 회원가입 (라이센스 코드 필수 검증) ---
 @app.route('/api/admin/register', methods=['POST'])
 def dev_register():
     data = request.get_json() or {}
@@ -104,7 +108,7 @@ def dev_register():
     if not username or not password or not invite_code:
         return jsonify({'success': False, 'message': '아이디, 비밀번호, 라이센스 코드를 모두 입력해주세요.'}), 400
 
-    # 라이센스 코드 확인
+    # 라이센스 코드 검증
     invite = InviteCode.query.filter_by(code=invite_code, used=False).first()
     if not invite:
         return jsonify({'success': False, 'message': '유효하지 않거나 이미 사용된 라이센스 코드입니다.'}), 400
@@ -112,7 +116,7 @@ def dev_register():
     if User.query.filter_by(username=username).first():
         return jsonify({'success': False, 'message': '이미 존재하는 개발자 아이디입니다.'}), 400
 
-    # 회원가입 진행 및 라이센스 사용 처리
+    # 회원가입 처리 및 라이센스 소모 처리
     user = User(username=username, password=password)
     db.session.add(user)
     invite.used = True
@@ -130,15 +134,14 @@ def dev_login():
     if user:
         session['user_id'] = user.id
         session['username'] = user.username
-        return jsonify({'success': True, 'username': user.username, 'is_master': (username == 'mineminyee')})
+        return jsonify({'success': True, 'username': user.username})
 
     return jsonify({'success': False, 'message': '아이디 또는 비밀번호가 틀렸습니다.'}), 401
 
 @app.route('/api/admin/check_session')
 def dev_check_session():
     if session.get('user_id'):
-        username = session.get('username')
-        return jsonify({'logged_in': True, 'username': username, 'is_master': (username == 'mineminyee')})
+        return jsonify({'logged_in': True, 'username': session.get('username')})
     return jsonify({'logged_in': False})
 
 @app.route('/api/admin/logout', methods=['POST'])
@@ -146,13 +149,9 @@ def dev_logout():
     session.clear()
     return jsonify({'success': True})
 
-# --- 마스터 전용 라이센스 코드 생성 API ---
-@app.route('/api/admin/invite/generate', methods=['POST'])
-@login_required
-def generate_invite():
-    if session.get('username') != 'mineminyee':
-        return jsonify({'success': False, 'message': '권한이 없습니다.'}), 403
-
+# --- 사장님 전용 비밀 라이센스 관리 API (로그인 불필요, URL 자체가 비밀 키 역할) ---
+@app.route('/api/secret/invite/generate', methods=['POST'])
+def secret_generate_invite():
     chars = string.ascii_uppercase + string.digits
     random_part = ''.join(random.choices(chars, k=12))
     code_str = f"LUASAFE-INVITE-{random_part}"
@@ -162,11 +161,8 @@ def generate_invite():
     db.session.commit()
     return jsonify({'success': True, 'code': code_str})
 
-@app.route('/api/admin/invite/list', methods=['GET'])
-@login_required
-def list_invites():
-    if session.get('username') != 'mineminyee':
-        return jsonify([])
+@app.route('/api/secret/invite/list', methods=['GET'])
+def secret_list_invites():
     invites = InviteCode.query.order_by(InviteCode.created_at.desc()).all()
     return jsonify([{"code": i.code, "used": i.used} for i in invites])
 
@@ -305,7 +301,7 @@ def user_reset_hwid():
     key_obj.hwid = "UNBOUND"
     key_obj.last_hwid_reset = datetime.utcnow()
     db.session.commit()
-    return jsonify({"success": True, "message": "HWID 초기화 완료!"})
+    return jsonify({'success': True, 'message': 'HWID 초기화 완료!'})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
