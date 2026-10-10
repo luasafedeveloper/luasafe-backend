@@ -29,7 +29,6 @@
             text-align: center;
             margin-bottom: 20px;
             font-size: 22px;
-            letter-spacing: 0.5px;
         }
         .section {
             margin-bottom: 20px;
@@ -109,7 +108,7 @@
 <div class="container">
     <h2 id="formTitle">Luasafe 로그인</h2>
 
-    <!-- 로그인 / 회원가입 입력 섹션 -->
+    <!-- 로그인 및 회원가입 입력 폼 -->
     <div id="authSection">
         <div class="section">
             <label>아이디</label>
@@ -121,7 +120,7 @@
         <div class="link-text" id="toggleLink" onclick="toggleMode()">계정이 없나요? <span>회원가입하기</span></div>
     </div>
 
-    <!-- 로그인 성공 후 나타나는 허브 (로더 및 키 관리 섹션) -->
+    <!-- 로그인 성공 후 허브 창 -->
     <div id="hubSection" style="display:none;">
         <div class="section">
             <label>발급된 내 키</label>
@@ -155,7 +154,6 @@
     let isSignupMode = false;
     let currentKey = "";
 
-    // 로그인 <-> 회원가입 모드 전환
     function toggleMode() {
         isSignupMode = !isSignupMode;
         if (isSignupMode) {
@@ -171,7 +169,6 @@
         }
     }
 
-    // 로그인 또는 회원가입 요청 처리
     async function handleAuth() {
         let username = document.getElementById('usernameInput').value.trim();
         let password = document.getElementById('passwordInput').value.trim();
@@ -193,14 +190,13 @@
 
             if (data.success) {
                 if (isSignupMode) {
-                    alert("회원가입이 완료되었습니다! 로그인해주세요.");
-                    toggleMode(); // 로그인 화면으로 자동 전환
+                    alert(data.message); // "회원가입이 완료되었습니다!"
+                    toggleMode(); // 로그인 화면으로 전환
                 } else {
                     alert("로그인 성공!");
                     currentKey = data.key;
                     document.getElementById('keyInput').value = currentKey;
                     
-                    // 로그인 창 숨기고 허브 창 표시
                     document.getElementById('authSection').style.display = 'none';
                     document.getElementById('formTitle').innerText = "Luasafe Key & Script Hub";
                     document.getElementById('hubSection').style.display = 'block';
@@ -208,14 +204,13 @@
                     lookupKey(currentKey);
                 }
             } else {
-                alert(data.message); // "이미 존재하는 아이디입니다" 또는 오류 메시지 출력
+                alert(data.message); // "이미 존재하는 아이디입니다." 등
             }
         } catch (e) {
             alert("서버 통신 오류가 발생했습니다.");
         }
     }
 
-    // 키 정보 조회 및 파라미터 없는 완전 깔끔한 로더 생성
     async function lookupKey(key) {
         try {
             let res = await fetch('/api/user/lookup', {
@@ -231,17 +226,16 @@
                 document.getElementById('expiryText').innerText = data.expiry;
                 document.getElementById('hwidText').innerText = data.hwid;
 
-                // 원하시던 파라미터 없는 깔끔한 로더 형식
-                let cleanLoader = `scriptkey = "${data.key}"\n\nloadstring(game:HttpGet("https://luasafe-backend.onrender.com/loader.lua"))()`;
+                // 확실하게 작동하는 파라미터 포함 로더 코드 형식
+                let workingLoader = `scriptkey = "${data.key}"\n\nloadstring(game:HttpGet("https://luasafe-backend.onrender.com/loader.lua?key=" .. scriptkey .. "&hwid=" .. tostring(game:GetService("RbxAnalyticsService"):GetClientId())))()`;
                 
-                document.getElementById('loaderOutput').innerText = cleanLoader;
+                document.getElementById('loaderOutput').innerText = workingLoader;
 
                 loadUserScripts(data.script_name);
             }
         } catch (e) {}
     }
 
-    // 스크립트 목록 불러오기
     async function loadUserScripts(selectedName) {
         try {
             let res = await fetch('/api/user/scripts');
@@ -258,7 +252,6 @@
         } catch (e) {}
     }
 
-    // HWID 초기화
     async function resetHwid() {
         if (!confirm("정말 HWID를 초기화하시겠습니까? (3일 동안 재초기화 불가)")) return;
         let newScript = document.getElementById('scriptSelect').value;
@@ -277,7 +270,6 @@
         }
     }
 
-    // 로더 복사
     function copyLoader() {
         let code = document.getElementById('loaderOutput').innerText;
         navigator.clipboard.writeText(code).then(() => {
