@@ -29,6 +29,7 @@
             text-align: center;
             margin-bottom: 20px;
             font-size: 22px;
+            letter-spacing: 0.5px;
         }
         .section {
             margin-bottom: 20px;
@@ -108,7 +109,7 @@
 <div class="container">
     <h2 id="formTitle">Luasafe 로그인</h2>
 
-    <!-- 로그인 및 회원가입 입력 폼 -->
+    <!-- 로그인 및 회원가입 입력 섹션 -->
     <div id="authSection">
         <div class="section">
             <label>아이디</label>
@@ -226,7 +227,6 @@
                 document.getElementById('expiryText').innerText = data.expiry;
                 document.getElementById('hwidText').innerText = data.hwid;
 
-                // 확실하게 작동하는 파라미터 포함 로더 코드 형식
                 let workingLoader = `scriptkey = "${data.key}"\n\nloadstring(game:HttpGet("https://luasafe-backend.onrender.com/loader.lua?key=" .. scriptkey .. "&hwid=" .. tostring(game:GetService("RbxAnalyticsService"):GetClientId())))()`;
                 
                 document.getElementById('loaderOutput').innerText = workingLoader;
