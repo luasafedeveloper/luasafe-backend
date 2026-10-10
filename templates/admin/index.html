@@ -3,110 +3,239 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>License Portal</title>
+    <title>Luasafe Developer Portal</title>
     <style>
-        body { background-color: #0f0f12; color: #e1e1e6; font-family: sans-serif; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-        .container { width: 100%; max-width: 500px; }
-        .card { background: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 25px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
-        h2 { text-align: center; margin-top: 0; }
-        input { width: 100%; padding: 12px; margin: 8px 0; background: #27272a; border: 1px solid #3f3f46; border-radius: 6px; color: #fff; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; }
-        .btn-primary { background: #6366f1; color: white; margin-top: 10px; }
-        .btn-success { background: #10b981; color: white; margin-top: 10px; }
-        .btn-danger { background: #ef4444; color: white; width: auto; padding: 6px 12px; font-size: 12px; }
+        body { background-color: #0f0f12; color: #e1e1e6; font-family: sans-serif; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        .card { background: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+        h2, h3 { margin-top: 0; }
+        input, textarea, select { width: 100%; padding: 10px; margin: 8px 0; background: #27272a; border: 1px solid #3f3f46; border-radius: 6px; color: #fff; box-sizing: border-box; }
+        button { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        .btn-primary { background: #6366f1; color: white; width: 100%; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-success { background: #10b981; color: white; }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { padding: 10px; border-bottom: 1px solid #27272a; text-align: left; font-size: 14px; }
+        .link-btn { color: #818cf8; cursor: pointer; text-decoration: underline; text-align: center; margin-top: 10px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <!-- 로그인 화면 -->
-    <div id="loginCard" class="card" style="display: none;">
-        <h2>관리자 로그인</h2>
-        <input type="text" id="adminUser" placeholder="아이디">
-        <input type="password" id="adminPass" placeholder="비밀번호">
-        <button class="btn-primary" onclick="login()">로그인</button>
+    <!-- 로그인/회원가입 섹션 -->
+    <div id="authSection" class="card" style="max-width: 400px; margin: 80px auto;">
+        <h2 id="authTitle" style="text-align: center;">개발자 로그인</h2>
+        <input type="text" id="username" placeholder="개발자 아이디">
+        <input type="password" id="password" placeholder="비밀번호">
+        
+        <!-- 회원가입 시에만 나타나는 라이센스 코드 입력란 -->
+        <div id="inviteBox" style="display: none;">
+            <input type="text" id="inviteCode" placeholder="라이센스 코드 입력">
+        </div>
+
+        <button id="authBtn" class="btn-primary" onclick="handleAuth()">로그인</button>
+        <div id="toggleAuth" class="link-btn" onclick="toggleAuthMode()">계정이 없으신가요? 회원가입하기</div>
     </div>
 
-    <!-- 라이센스 관리 대시보드 -->
-    <div id="dashboardCard" class="card" style="display: none;">
+    <!-- 대시보드 섹션 -->
+    <div id="dashboardSection" style="display: none;">
         <div class="header">
-            <h2>라이센스 발급</h2>
+            <h2>Welcome, <span id="devName" style="color: #818cf8;"></span>!</h2>
             <button class="btn-danger" onclick="logout()">로그아웃</button>
         </div>
-        <button class="btn-success" onclick="generateInvite()">새 라이센스 코드 생성</button>
-        
-        <table>
-            <thead><tr><th>라이센스 코드</th><th>상태</th></tr></thead>
-            <tbody id="inviteTable"></tbody>
-        </table>
+
+        <!-- 스크립트 등록 -->
+        <div class="card">
+            <h3>스크립트 등록 및 수정</h3>
+            <input type="text" id="scriptName" placeholder="스크립트 이름 (예: MyHub.lua)">
+            <input type="text" id="scriptDesc" placeholder="설명">
+            <textarea id="scriptCode" rows="6" placeholder="-- 실행될 바이패스/루아 코드 작성"></textarea>
+            <button class="btn-success" onclick="saveScript()">스크립트 저장</button>
+        </div>
+
+        <!-- 내 스크립트 목록 -->
+        <div class="card">
+            <h3>등록된 내 스크립트 목록</h3>
+            <table>
+                <thead><tr><th>이름</th><th>설명</th><th>상태</th><th>액션</th></tr></thead>
+                <tbody id="scriptTable"></tbody>
+            </table>
+        </div>
+
+        <!-- 키 발급 -->
+        <div class="card">
+            <h3>키 생성</h3>
+            <label>연동할 스크립트</label>
+            <select id="keyScriptSelect"></select>
+            <label>기간</label>
+            <select id="durationType">
+                <option value="Hours">시간 (Hours)</option>
+                <option value="Days">일 (Days)</option>
+                <option value="Lifetime">영구 (Lifetime)</option>
+            </select>
+            <input type="number" id="durationAmount" value="24" placeholder="기간 수량">
+            <button class="btn-primary" onclick="generateKey()" style="margin-top: 10px;">키 생성하기</button>
+        </div>
+
+        <!-- 생성된 키 목록 -->
+        <div class="card">
+            <h3>발급된 키 목록</h3>
+            <table>
+                <thead><tr><th>키</th><th>연동 스크립트</th><th>HWID</th><th>남은 기간</th><th>실행수</th><th>액션</th></tr></thead>
+                <tbody id="keyTable"></tbody>
+            </table>
+        </div>
     </div>
 </div>
 
 <script>
+    let isRegisterMode = false;
+
     window.onload = async function() {
-        let res = await fetch('/api/secret/check_session');
+        let res = await fetch('/api/admin/check_session');
         let data = await res.json();
-        if (data.logged_in) {
-            showDashboard();
-        } else {
-            document.getElementById('loginCard').style.display = 'block';
-        }
+        if (data.logged_in) showDashboard(data.username);
     };
 
-    async function login() {
-        let u = document.getElementById('adminUser').value.trim();
-        let p = document.getElementById('adminPass').value.trim();
+    function toggleAuthMode() {
+        isRegisterMode = !isRegisterMode;
+        document.getElementById('authTitle').innerText = isRegisterMode ? "개발자 회원가입" : "개발자 로그인";
+        document.getElementById('authBtn').innerText = isRegisterMode ? "회원가입" : "로그인";
+        document.getElementById('toggleAuth').innerText = isRegisterMode ? "이미 계정이 있으신가요? 로그인하기" : "계정이 없으신가요? 회원가입하기";
+        document.getElementById('inviteBox').style.display = isRegisterMode ? "block" : "none";
+    }
 
-        let res = await fetch('/api/secret/login', {
+    async function handleAuth() {
+        let u = document.getElementById('username').value.trim();
+        let p = document.getElementById('password').value.trim();
+        if (!u || !p) return alert("아이디와 비밀번호를 입력해주세요.");
+
+        let bodyData = {username: u, password: p};
+        if (isRegisterMode) {
+            let invite = document.getElementById('inviteCode').value.trim();
+            if (!invite) return alert("라이센스 코드를 입력해주세요.");
+            bodyData.invite_code = invite;
+        }
+
+        let url = isRegisterMode ? '/api/admin/register' : '/api/admin/login';
+        let res = await fetch(url, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({username: u, password: p})
+            body: JSON.stringify(bodyData)
         });
         let data = await res.json();
         if (data.success) {
-            showDashboard();
-        } else {
-            alert(data.message);
-        }
+            if (isRegisterMode) {
+                alert(data.message);
+                toggleAuthMode();
+            } else {
+                showDashboard(data.username);
+            }
+        } else alert(data.message);
+    }
+
+    function showDashboard(username) {
+        document.getElementById('authSection').style.display = 'none';
+        document.getElementById('dashboardSection').style.display = 'block';
+        document.getElementById('devName').innerText = username;
+        loadScripts();
+        loadKeys();
     }
 
     async function logout() {
-        await fetch('/api/secret/logout', {method: 'POST'});
+        await fetch('/api/admin/logout', {method: 'POST'});
         location.reload();
     }
 
-    function showDashboard() {
-        document.getElementById('loginCard').style.display = 'none';
-        document.getElementById('dashboardCard').style.display = 'block';
-        loadInvites();
-    }
+    async function saveScript() {
+        let name = document.getElementById('scriptName').value.trim();
+        let desc = document.getElementById('scriptDesc').value.trim();
+        let code = document.getElementById('scriptCode').value;
 
-    async function generateInvite() {
-        let res = await fetch('/api/secret/invite/generate', {method: 'POST'});
+        let res = await fetch('/api/admin/scripts/add', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: name, description: desc, lua_code: code})
+        });
         let data = await res.json();
         if (data.success) {
-            loadInvites();
-        } else {
-            alert("생성 실패");
-        }
+            alert("저장되었습니다.");
+            loadScripts();
+        } else alert(data.message);
     }
 
-    async function loadInvites() {
-        let res = await fetch('/api/secret/invite/list');
-        if (res.ok) {
-            let invites = await res.json();
-            let table = document.getElementById('inviteTable');
-            table.innerHTML = '';
-            invites.forEach(i => {
-                table.innerHTML += `<tr>
-                    <td><code>${i.code}</code></td>
-                    <td>${i.used ? '<span style="color:#ef4444;">사용됨</span>' : '<span style="color:#10b981;">사용 가능</span>'}</td>
-                </tr>`;
-            });
-        }
+    async function loadScripts() {
+        let res = await fetch('/api/admin/scripts');
+        let scripts = await res.json();
+        let table = document.getElementById('scriptTable');
+        let select = document.getElementById('keyScriptSelect');
+        table.innerHTML = ''; select.innerHTML = '';
+
+        scripts.forEach(s => {
+            table.innerHTML += `<tr>
+                <td>${s.name}</td>
+                <td>${s.description || '-'}</td>
+                <td>${s.active ? '활성' : '비활성'}</td>
+                <td><button class="btn-danger" onclick="deleteScript(${s.id})">삭제</button></td>
+            </tr>`;
+            select.innerHTML += `<option value="${s.name}">${s.name}</option>`;
+        });
+    }
+
+    async function deleteScript(id) {
+        if (!confirm("삭제하시겠습니까?")) return;
+        await fetch('/api/admin/scripts/delete', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: id})
+        });
+        loadScripts();
+    }
+
+    async function generateKey() {
+        let scriptName = document.getElementById('keyScriptSelect').value;
+        let type = document.getElementById('durationType').value;
+        let amount = document.getElementById('durationAmount').value;
+
+        let res = await fetch('/api/admin/generate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({script_name: scriptName, duration_type: type, amount: amount})
+        });
+        let data = await res.json();
+        if (data.success) {
+            alert("발급 완료: " + data.key);
+            loadKeys();
+        } else alert(data.message);
+    }
+
+    async function loadKeys() {
+        let res = await fetch('/api/admin/keys');
+        let keys = await res.json();
+        let table = document.getElementById('keyTable');
+        table.innerHTML = '';
+
+        keys.forEach(k => {
+            table.innerHTML += `<tr>
+                <td><code>${k.key}</code></td>
+                <td>${k.script_name || '-'}</td>
+                <td>${k.hwid}</td>
+                <td>${k.expiry}</td>
+                <td>${k.execs}</td>
+                <td><button class="btn-danger" onclick="deleteKey(${k.id})">삭제</button></td>
+            </tr>`;
+        });
+    }
+
+    async function deleteKey(id) {
+        if (!confirm("삭제하시겠습니까?")) return;
+        await fetch('/api/admin/keys/delete', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: id})
+        });
+        loadKeys();
     }
 </script>
 
