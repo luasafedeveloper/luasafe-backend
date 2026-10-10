@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Mineminyee - Key Hub</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+        body { background: #000; color: #fff; display: flex; justify-content: center; align-items: center; min-height: 100vh; background-image: linear-gradient(135deg, #111 0%, #000 100%); }
+        .container { width: 100%; max-width: 480px; background: #141414; border: 1px solid #262626; padding: 35px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+        h1 { text-align: center; margin-bottom: 25px; font-size: 1.6rem; background: linear-gradient(90deg, #fff, #777); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .section { margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid #1f1f1f; }
+        .section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        label { display: block; margin-bottom: 8px; font-weight: 500; color: #aaa; font-size: 0.9rem; }
+        input, select { width: 100%; padding: 12px; background: #000; border: 1px solid #333; color: #fff; border-radius: 6px; font-size: 0.95rem; margin-bottom: 10px; }
+        input:focus, select:focus { outline: none; border-color: #fff; }
+        button { width: 100%; padding: 12px; border: none; border-radius: 6px; font-size: 0.95rem; font-weight: bold; cursor: pointer; transition: opacity 0.2s; }
+        .btn-primary { background: linear-gradient(90deg, #fff, #ccc); color: #000; }
+        .btn-warning { background: linear-gradient(90deg, #ffaa00, #cc8800); color: #000; margin-top: 10px; }
+        .btn-copy { background: #222; color: #fff; border: 1px solid #444; margin-top: 8px; font-size: 0.85rem; padding: 8px; }
+        button:hover { opacity: 0.85; }
+        .result-box { margin-top: 15px; background: #080808; padding: 15px; border-radius: 6px; border: 1px solid #222; display: none; }
+        .result-box p { margin-bottom: 6px; font-size: 0.85rem; color: #ccc; }
+        .result-box span { color: #fff; font-weight: bold; }
+        pre { background: #000; border: 1px solid #333; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 0.72rem; color: #00ffcc; overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin-top: 8px; }
+        .msg { margin-top: 10px; font-size: 0.85rem; text-align: center; }
+        .error { color: #ff4d4d; }
+        .success { color: #4ade80; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Key & Script Hub</h1>
+
+    <div class="section">
+        <label for="keyInput">키 등록 및 스크립트 발급</label>
+        <input type="text" id="keyInput" placeholder="발급받은 키를 입력하세요...">
+        <button class="btn-primary" onclick="lookupKey()">스크립트 발급 및 정보 확인</button>
+        
+        <!-- 보안 로더 코드 출력 박스 -->
+        <div id="loaderBox" class="result-box">
+            <p>스크립트:</p>
+            <pre id="luaLoaderCode"></pre>
+            <button class="btn-copy" onclick="copyLoaderCode()">로더 코드 복사하기</button>
+        </div>
+
+        <!-- 키 상세 정보 및 HWID 리셋 박스 -->
+        <div id="lookupResult" class="result-box">
+            <p>상태: <span id="valStatus"></span></p>
+            <p>등급: <span id="valTier"></span></p>
+            <p>만료 시간: <span id="valExpiry"></span></p>
+            <p>등록된 HWID: <span id="valHwid"></span></p>
+            
+            <label style="margin-top: 12px;">사용할 스크립트 선택</label>
+            <select id="userScriptSelect"></select>
+
+            <button class="btn-warning" onclick="resetHwid()">HWID 초기화 및 스크립트 변경 (3일 쿨타임)</button>
+        </div>
+        <div id="actionMsg" class="msg"></div>
+    </div>
+</div>
+
+<script>
+    window.onload = function() {
+        fetch('/api/user/scripts')
+        .then(res => res.json())
+        .then(scripts => {
+            const select = document.getElementById('userScriptSelect');
+            select.innerHTML = '';
+            scripts.forEach(s => {
+                select.innerHTML += `<option value="${s.name}">${s.name} (${s.description || '설명 없음'})</option>`;
+            });
+        });
+    };
+
+    function lookupKey() {
+        const keyVal = document.getElementById('keyInput').value.trim();
+        const msgDiv = document.getElementById('actionMsg');
+        msgDiv.innerText = '';
+        
+        if (!keyVal) { alert('키를 입력해주세요.'); return; }
+
+        fetch('/api/user/lookup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: keyVal })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('valStatus').innerText = data.status;
+                document.getElementById('valTier').innerText = data.tier;
+                document.getElementById('valExpiry').innerText = data.expiry;
+                document.getElementById('valHwid').innerText = data.hwid;
+                
+                if(data.script_name) {
+                    document.getElementById('userScriptSelect').value = data.script_name;
+                }
+
+                // 핵심 로직을 Base64 인코딩 문자열로 감싸고, key 변수만 평문으로 조합하는 방식
+                const rawPayload = `
+local hwid = "Unknown";
+if syn and syn.get_hwid then hwid = syn.get_hwid();
+elseif gethwid then hwid = gethwid();
+elseif Fluxus and Fluxus.get_hwid then hwid = Fluxus.get_hwid();
+elseif identifyexecutor then
+    local execName = identifyexecutor();
+    if execName == "Delta" or execName == "Hydrogen" then
+        hwid = execName .."_"..(getcustomasset and "secure" or "standard");
+    end
+end
+if not hwid or hwid == "Unknown" or hwid == "" then
+    game:GetService("Players").LocalPlayer:Kick("[Mineminyee] Security Error: Invalid HWID.");
+    return;
+end
+local s, r = pcall(function()
+    return request({
+        Url = "http://lua-scriptluarmor.kro.kr:5000/loader.lua",
+        Method = "POST",
+        Headers = { ["Content-Type"] = "application/json" },
+        Body = game:GetService("HttpService"):JSONEncode({ key = script_key, hwid = hwid })
+    })
+end);
+if s and r and r.StatusCode == 200 then
+    local f, err = loadstring(r.Body);
+    if f then f(); else warn("[Mineminyee] Error: " .. tostring(err)); end
+else
+    game:GetService("Players").LocalPlayer:Kick("[Mineminyee] Auth Failed.");
+end;`.trim();
+
+                // Base64로 인코딩 처리
+                const encodedPayload = btoa(unescape(encodeURIComponent(rawPayload)));
+
+                // 유저가 복사하게 될 최종 런처 코드 (key만 평문, 나머지는 디코딩 후 실행)
+                const luaCode = `-- [Mineminyee Secure Loader]\n` +
+                    `script_key = "${keyVal}";\n` +
+                    `local _p = "${encodedPayload}";\n` +
+                    `local function _d(b)\n` +
+                    `    local c='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='\n` +
+                    `    b=string.gsub(b, '[^'..c..'=]', '')\n` +
+                    `    return (b:gsub('.', function(x)\n` +
+                    `        if x == '=' then return '' end\n` +
+                    `        local r,f='',(c:find(x)-1)\n` +
+                    `        for i=6,1,-1 do r=r..(f%2^i-f%2^(i-1)>0 and '1' or '0') end\n` +
+                    `        return r;\n` +
+                    `    end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x)\n` +
+                    `        if #x ~= 8 then return '' end\n` +
+                    `        local t=0 for i=1,8 do t=t+(x:sub(i,i)=='1' and 2^(8-i) or 0) end\n` +
+                    `        return string.char(t)\n` +
+                    `    end))\n` +
+                    `end\n` +
+                    `local f, e = loadstring(_d(_p));\n` +
+                    `if f then f(); else warn("Loader Error: " .. tostring(e)); end`;
+                
+                document.getElementById('luaLoaderCode').innerText = luaCode;
+                document.getElementById('loaderBox').style.display = 'block';
+                document.getElementById('lookupResult').style.display = 'block';
+            } else {
+                document.getElementById('loaderBox').style.display = 'none';
+                document.getElementById('lookupResult').style.display = 'none';
+                msgDiv.className = 'msg error';
+                msgDiv.innerText = data.message || '존재하지 않는 키입니다.';
+            }
+        });
+    }
+
+    function copyLoaderCode() {
+        const codeText = document.getElementById('luaLoaderCode').innerText;
+        navigator.clipboard.writeText(codeText).then(() => {
+            alert('로더 코드가 클립보드에 복사되었습니다!');
+        });
+    }
+
+    function resetHwid() {
+        const keyVal = document.getElementById('keyInput').value.trim();
+        const script_name = document.getElementById('userScriptSelect').value;
+        const msgDiv = document.getElementById('actionMsg');
+        
+        if (!confirm('정말 HWID를 초기화하고 스크립트를 변경하시겠습니까? (3일 쿨타임 적용)')) return;
+
+        fetch('/api/user/reset_hwid', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: keyVal, script_name: script_name })
+        })
+        .then(res => res.json())
+        .then(data => {
+            msgDiv.className = data.success ? 'msg success' : 'msg error';
+            msgDiv.innerText = data.message;
+            if (data.success) lookupKey();
+        });
+    }
+</script>
+
+</body>
+</html>
