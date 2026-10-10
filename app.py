@@ -89,11 +89,11 @@ def domain_router(path):
 
     return render_template("user/index.html")
 
-# --- 보안 스크립트 로더 (POST 방식 수신 및 엄격한 HWID 검증) ---
+# --- 보안 스크립트 로더 (GET 파라미터 및 엄격한 HWID 검증) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
     if is_browser(request):
-        return 'game:GetService("Players").LocalPlayer:Kick("[Mineminyee] Browser access denied.");'
+        return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Browser access denied.");'
 
     data = request.get_json(silent=True)
     if not data:
@@ -108,22 +108,22 @@ def loader():
     print(f"[DEBUG] Received Key: '{key_str}', HWID: '{client_hwid}'")
 
     if get_setting("kill_switch") == "true":
-        return 'game:GetService("Players").LocalPlayer:Kick("[Mineminyee] Kill switch is currently enabled.");'
+        return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Kill switch is currently enabled.");'
     
     if not client_hwid or client_hwid.lower() == "unknown":
-        return 'game:GetService("Players").LocalPlayer:Kick("[Mineminyee] Security Error: Invalid HWID detected.");'
+        return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Security Error: Invalid HWID detected.");'
 
     if not key_str:
-        return 'game:GetService("Players").LocalPlayer:Kick("[Mineminyee] Error: Key parameter is missing.");'
+        return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Error: Key parameter is missing.");'
 
     key_obj = Key.query.filter_by(key=key_str).first()
     if not key_obj or not key_obj.is_valid():
-        return 'game:GetService("Players").LocalPlayer:Kick("[Mineminyee] Invalid or expired key!");'
+        return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Invalid or expired key!");'
     
     if key_obj.hwid == "UNBOUND" or not key_obj.hwid:
         key_obj.hwid = client_hwid
     elif key_obj.hwid != client_hwid:
-        return 'game:GetService("Players").LocalPlayer:Kick("[Mineminyee] Key is bound to another device!");'
+        return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Key is bound to another device!");'
     
     key_obj.exec_count += 1
     db.session.commit()
@@ -134,10 +134,10 @@ def loader():
         script = Script.query.filter_by(active=True).first()
         
     if not script:
-        return 'game:GetService("Players").LocalPlayer:Kick("[Mineminyee] No active script available!");'
+        return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] No active script available!");'
     
     protected_wrapper = f"""
--- [Mineminyee Secure Execution Protected]
+-- [Luasafe Secure Execution Protected]
 -- Target: {script.name}
 pcall(function()
     {script.lua_code}
@@ -240,7 +240,8 @@ def admin_generate():
         
         chars = string.ascii_uppercase + string.digits
         random_part = ''.join(random.choices(chars, k=16))
-        key_str = f"mineminyee-{random_part[:4]}-{random_part[4:8]}-{random_part[8:12]}"
+        # 접두사를 luasafe로 변경
+        key_str = f"luasafe-{random_part[:4]}-{random_part[4:8]}-{random_part[8:12]}"
 
         if duration_type == "Lifetime":
             expires = None
