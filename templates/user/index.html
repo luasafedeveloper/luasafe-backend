@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Luasafe - User Hub</title>
+    <title>Luasafe - Key & Script Hub</title>
     <style>
         body {
             background-color: #0d0d0d;
@@ -37,7 +37,7 @@
             display: block;
             font-size: 13px;
             color: #a0a0a0;
-            margin-bottom: 6px;
+            margin-bottom: 8px;
         }
         input, select {
             width: 100%;
@@ -67,23 +67,8 @@
         }
         .btn-primary { background-color: #ffffff; color: #000000; }
         .btn-primary:hover { background-color: #dcdcdc; }
-        .btn-success { background-color: #27ae60; color: #ffffff; }
-        .btn-success:hover { background-color: #219653; }
         .btn-warning { background-color: #f39c12; color: #000000; }
         .btn-warning:hover { background-color: #e67e22; }
-        .btn-danger { background-color: #e74c3c; color: #ffffff; }
-        .btn-danger:hover { background-color: #c0392b; }
-        .link-text {
-            text-align: center;
-            font-size: 13px;
-            color: #a0a0a0;
-            cursor: pointer;
-            margin-top: 10px;
-        }
-        .link-text span {
-            color: #f39c12;
-            text-decoration: underline;
-        }
         pre {
             background-color: #0a0a0a;
             border: 1px solid #222;
@@ -108,127 +93,48 @@
 <body>
 
 <div class="container">
-    <h2 id="formTitle">Luasafe 로그인</h2>
+    <h2>Luasafe Hub</h2>
 
-    <!-- 로그인 및 회원가입 입력 폼 -->
-    <div id="authSection">
-        <div class="section">
-            <label>아이디</label>
-            <input type="text" id="usernameInput" placeholder="아이디를 입력하세요">
-            <label>비밀번호</label>
-            <input type="password" id="passwordInput" placeholder="비밀번호를 입력하세요">
-        </div>
-        <button id="authBtn" class="btn-primary" onclick="handleAuth()">로그인</button>
-        <div class="link-text" id="toggleLink" onclick="toggleMode()">계정이 없나요? <span>회원가입하기</span></div>
+    <!-- 키 입력 및 스크립트 발급 섹션 -->
+    <div class="section">
+        <label>키 등록 및 스크립트 발급</label>
+        <input type="text" id="keyInput" placeholder="luasafe-XXXX-XXXX-XXXX 키를 입력하세요">
+        <button class="btn-primary" onclick="lookupKey()">스크립트 발급 및 정보 확인</button>
     </div>
 
-    <!-- 로그인 성공 후 허브 창 -->
-    <div id="hubSection" style="display:none;">
-        <div class="section">
-            <label>발급된 내 키 (<span id="userDisplay" style="color:#f39c12;"></span>)</label>
-            <input type="text" id="keyInput" readonly style="color: #f39c12; font-weight: bold;">
-        </div>
+    <!-- 파라미터 없는 깔끔한 로더 출력 영역 -->
+    <div class="section" id="loaderSection" style="display:none;">
+        <label>생성된 로더 코드 (복사해서 사용)</label>
+        <pre id="loaderOutput"></pre>
+        <button class="btn-primary" onclick="copyLoader()">로더 코드 복사하기</button>
+    </div>
 
-        <div class="section">
-            <label>생성된 로더 코드 (복사해서 사용)</label>
-            <pre id="loaderOutput"></pre>
-            <button class="btn-primary" onclick="copyLoader()">로더 코드 복사하기</button>
-        </div>
-
-        <div class="info-box" id="infoBox">
-            <div><strong>상태:</strong> <span id="statusText">-</span></div>
-            <div><strong>등급:</strong> <span id="tierText">-</span></div>
-            <div><strong>만료 시간:</strong> <span id="expiryText">-</span></div>
-            <div><strong>등록된 HWID:</strong> <span id="hwidText">-</span></div>
-            
-            <div style="margin-top: 12px;">
-                <label>사용할 스크립트 선택</label>
-                <select id="scriptSelect"></select>
-            </div>
-            <button class="btn-warning" onclick="resetHwid()" style="margin-top: 10px;">HWID 초기화 및 스크립트 변경 (3일 쿨타임)</button>
-        </div>
+    <!-- 키 상세 정보 및 관리 영역 -->
+    <div class="info-box" id="infoBox" style="display:none;">
+        <div><strong>상태:</strong> <span id="statusText">-</span></div>
+        <div><strong>등급:</strong> <span id="tierText">-</span></div>
+        <div><strong>만료 시간:</strong> <span id="expiryText">-</span></div>
+        <div><strong>등록된 HWID:</strong> <span id="hwidText">-</span></div>
         
-        <button class="btn-danger" onclick="logout()" style="margin-top: 15px;">로그아웃</button>
+        <div style="margin-top: 12px;">
+            <label>사용할 스크립트 선택</label>
+            <select id="scriptSelect"></select>
+        </div>
+        <button class="btn-warning" onclick="resetHwid()" style="margin-top: 10px;">HWID 초기화 및 스크립트 변경 (3일 쿨타임)</button>
     </div>
 </div>
 
 <script>
-    let isSignupMode = false;
     let currentKey = "";
 
-    // 페이지 로드 시 기존 세션(로그인 상태) 확인
-    window.onload = async function() {
-        try {
-            let res = await fetch('/api/user/check_session');
-            let data = await res.json();
-            if (data.logged_in) {
-                showHub(data.username, data.key);
-            }
-        } catch (e) {}
-    };
-
-    function toggleMode() {
-        isSignupMode = !isSignupMode;
-        if (isSignupMode) {
-            document.getElementById('formTitle').innerText = "Luasafe 회원가입";
-            document.getElementById('authBtn').innerText = "회원가입 하기";
-            document.getElementById('authBtn').className = "btn-success";
-            document.getElementById('toggleLink').innerHTML = "이미 계정이 있으신가요? <span>로그인하기</span>";
-        } else {
-            document.getElementById('formTitle').innerText = "Luasafe 로그인";
-            document.getElementById('authBtn').innerText = "로그인";
-            document.getElementById('authBtn').className = "btn-primary";
-            document.getElementById('toggleLink').innerHTML = "계정이 없나요? <span>회원가입하기</span>";
-        }
-    }
-
-    async function handleAuth() {
-        let username = document.getElementById('usernameInput').value.trim();
-        let password = document.getElementById('passwordInput').value.trim();
-
-        if (!username || !password) {
-            alert("아이디와 비밀번호를 모두 입력해주세요.");
+    async function lookupKey() {
+        let key = document.getElementById('keyInput').value.trim();
+        if (!key) {
+            alert("키를 입력해주세요!");
             return;
         }
-
-        let endpoint = isSignupMode ? '/api/user/signup' : '/api/user/login';
-
-        try {
-            let res = await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: username, password: password })
-            });
-            let data = await res.json();
-
-            if (data.success) {
-                if (isSignupMode) {
-                    alert(data.message);
-                    toggleMode(); // 로그인 화면으로 전환
-                } else {
-                    showHub(username, data.key);
-                }
-            } else {
-                alert(data.message);
-            }
-        } catch (e) {
-            alert("서버 통신 오류가 발생했습니다.");
-        }
-    }
-
-    function showHub(username, key) {
         currentKey = key;
-        document.getElementById('userDisplay').innerText = username;
-        document.getElementById('keyInput').value = currentKey;
-        
-        document.getElementById('authSection').style.display = 'none';
-        document.getElementById('formTitle').innerText = "Luasafe Key & Script Hub";
-        document.getElementById('hubSection').style.display = 'block';
 
-        lookupKey(currentKey);
-    }
-
-    async function lookupKey(key) {
         try {
             let res = await fetch('/api/user/lookup', {
                 method: 'POST',
@@ -242,13 +148,20 @@
                 document.getElementById('tierText').innerText = data.tier;
                 document.getElementById('expiryText').innerText = data.expiry;
                 document.getElementById('hwidText').innerText = data.hwid;
+                document.getElementById('infoBox').style.display = 'block';
 
                 let cleanLoader = `scriptkey = "${data.key}"\n\nloadstring(game:HttpGet("https://luasafe-backend.onrender.com/loader.lua"))()`;
+                
                 document.getElementById('loaderOutput').innerText = cleanLoader;
+                document.getElementById('loaderSection').style.display = 'block';
 
                 loadUserScripts(data.script_name);
+            } else {
+                alert(data.message);
             }
-        } catch (e) {}
+        } catch (e) {
+            alert("조회 중 오류가 발생했습니다.");
+        }
     }
 
     async function loadUserScripts(selectedName) {
@@ -279,18 +192,9 @@
             });
             let data = await res.json();
             alert(data.message);
-            if (data.success) lookupKey(currentKey);
+            if (data.success) lookupKey();
         } catch (e) {
             alert("통신 오류");
-        }
-    }
-
-    async function logout() {
-        try {
-            await fetch('/api/user/logout', { method: 'POST' });
-            location.reload();
-        } catch (e) {
-            location.reload();
         }
     }
 
