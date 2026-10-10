@@ -75,7 +75,8 @@ def domain_router(path):
     if "mineminyeehack" in host:
         return "<h1>비정상적인 접근입니다.</h1>", 403
 
-    if "lua-scriptluarmor" in host:
+    # /admin 경로 또는 관리자 도메인 접속 시 관리자 페이지 반환
+    if path == "admin" or path.startswith("admin/") or "lua-scriptluarmor" in host:
         if path.startswith("api/"):
             pass
         else:
@@ -94,10 +95,9 @@ def loader():
     if is_browser(request):
         return 'game:GetService("Players").LocalPlayer:Kick("[Mineminyee] Browser access denied.");'
 
-    # JSON 데이터를 안전하게 받아오기
     data = request.get_json(silent=True)
     if not data:
-        data = request.form # form-data 형식으로 올 경우 대비
+        data = request.form 
     
     if not data and request.args:
         data = request.args
@@ -105,27 +105,21 @@ def loader():
     key_str = str(data.get('key', '')).strip()
     client_hwid = str(data.get('hwid', '')).strip()
 
-    # [디버깅용] 서버 콘솔에 찍어보기 (키가 공백이거나 비어있으면 여기서 바로 확인 가능)
     print(f"[DEBUG] Received Key: '{key_str}', HWID: '{client_hwid}'")
 
-    # 0. 킬스위치 확인
     if get_setting("kill_switch") == "true":
         return 'game:GetService("Players").LocalPlayer:Kick("[Mineminyee] Kill switch is currently enabled.");'
     
-    # 1. Unknown HWID 원천 차단
     if not client_hwid or client_hwid.lower() == "unknown":
         return 'game:GetService("Players").LocalPlayer:Kick("[Mineminyee] Security Error: Invalid HWID detected.");'
 
-    # 2. 키 값이 비어있는 경우
     if not key_str:
         return 'game:GetService("Players").LocalPlayer:Kick("[Mineminyee] Error: Key parameter is missing.");'
 
-    # 3. 키 검증
     key_obj = Key.query.filter_by(key=key_str).first()
     if not key_obj or not key_obj.is_valid():
         return 'game:GetService("Players").LocalPlayer:Kick("[Mineminyee] Invalid or expired key!");'
     
-    # 4. HWID 바인딩 체크
     if key_obj.hwid == "UNBOUND" or not key_obj.hwid:
         key_obj.hwid = client_hwid
     elif key_obj.hwid != client_hwid:
@@ -134,7 +128,6 @@ def loader():
     key_obj.exec_count += 1
     db.session.commit()
     
-    # 5. 스크립트 반환
     target_script_name = getattr(key_obj, 'script_name', None) or get_setting("featured_script", "loader.lua")
     script = Script.query.filter_by(name=target_script_name, active=True).first()
     if not script:
