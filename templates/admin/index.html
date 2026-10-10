@@ -15,10 +15,10 @@
         .btn-danger { background: #ef4444; color: white; }
         .btn-success { background: #10b981; color: white; }
         .btn-warning { background: #f59e0b; color: white; }
+        .btn-outline { background: transparent; color: #818cf8; border: 1px solid #3f3f46; width: 100%; margin-top: 10px; }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { padding: 10px; border-bottom: 1px solid #27272a; text-align: left; font-size: 14px; }
-        .link-btn { color: #818cf8; cursor: pointer; text-decoration: underline; text-align: center; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -34,8 +34,8 @@
             <input type="text" id="inviteCode" placeholder="라이센스 코드 입력">
         </div>
 
-        <button id="authBtn" class="btn-primary" onclick="handleAuth()">로그인</button>
-        <div id="toggleAuth" class="link-btn" onclick="toggleAuthMode()">계정이 없으신가요? 회원가입하기</div>
+        <button id="authBtn" class="btn-primary" onclick="handleAuth()" style="margin-top: 10px;">로그인</button>
+        <button class="btn-outline" onclick="toggleAuthMode()" id="toggleAuth">계정이 없으신가요? 회원가입하기</button>
     </div>
 
     <!-- 대시보드 섹션 -->
@@ -194,7 +194,7 @@
     }
 
     async function generateKey() {
-        let scriptName = document.getElementById('keyScriptSelect'].value;
+        let scriptName = document.getElementById('keyScriptSelect').value;
         let type = document.getElementById('durationType').value;
         let amount = document.getElementById('durationAmount').value;
 
