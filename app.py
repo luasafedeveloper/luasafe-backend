@@ -37,7 +37,6 @@ def domain_router(path):
 # --- 스마트 로더 (브라우저 차단 오인식 문제 해결 완료) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
-    # GET 요청: 로블록스에서 loadstring(game:HttpGet(...))으로 접근할 때 실행되는 페이로드 반환
     if request.method == 'GET':
         lua_payload = '''local s, r = pcall(function()
     return request({
@@ -59,7 +58,6 @@ else
 end;'''
         return lua_payload
 
-    # POST 요청: 실행기에서 보낸 key와 hwid를 검증하고 실제 등록된 스크립트 코드를 반환
     data = request.get_json(silent=True) or request.form or {}
     key_str = str(data.get('key', '')).strip()
     client_hwid = str(data.get('hwid', '')).strip()
@@ -237,30 +235,6 @@ def admin_generate():
 # --- 일반 유저용 키 조회 및 로더 발급 API ---
 @app.route("/api/user/lookup", methods=["POST"])
 def user_lookup_key():
-    data = request.json or {}
-    key_str = data.get("key", "").strip()
-
-    if not key_str:
-        return jsonify({"success": False, "message": "키를 입력해주세요."}), 400
-
-    key_obj = Key.query.filter_by(key=key_str).first()
-    if not key_obj:
-        return jsonify({"success": False, "message": "존재하지 않는 키입니다."}), 404
-
-    return jsonify({
-        "success":,
-        "key": key_obj.key,
-        "tier": key_obj.tier,
-        "status": key_obj.status,
-        "hwid": key_obj.hwid if key_obj.hwid else "UNBOUND",
-        "expiry": key_obj.remaining_time(),
-        "execs": key_obj.exec_count,
-        "script_name": key_obj.script_name
-    })
-
-# 수정된 lookup 응답 성공 처리 안전 보완 (오타 방지용)
-@app.route("/api/user/lookup", methods=["POST"])
-def user_lookup_key_fixed():
     data = request.json or {}
     key_str = data.get("key", "").strip()
 
