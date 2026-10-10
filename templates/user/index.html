@@ -103,7 +103,7 @@
         <button class="btn-primary" onclick="lookupKey()">스크립트 발급 및 정보 확인</button>
     </div>
 
-    <!-- 로더 출력 영역 -->
+    <!-- 파라미터 없는 깔끔한 로더 출력 영역 -->
     <div class="section" id="loaderSection" style="display:none;">
         <label>생성된 로더 코드 (복사해서 사용)</label>
         <pre id="loaderOutput"></pre>
@@ -151,10 +151,10 @@
                 document.getElementById('hwidText').innerText = data.hwid;
                 document.getElementById('infoBox').style.display = 'block';
 
-                // 확실하게 작동하는 파라미터 포함 로더 형식
-                let workingLoader = `scriptkey = "${data.key}"\n\nloadstring(game:HttpGet("https://luasafe-backend.onrender.com/loader.lua?key=" .. scriptkey .. "&hwid=" .. tostring(game:GetService("RbxAnalyticsService"):GetClientId())))()`;
+                // 파라미터가 전혀 없는 깔끔한 로더 형식 생성
+                let cleanLoader = `scriptkey = "${data.key}"\n\nloadstring(game:HttpGet("https://luasafe-backend.onrender.com/loader.lua"))()`;
                 
-                document.getElementById('loaderOutput').innerText = workingLoader;
+                document.getElementById('loaderOutput').innerText = cleanLoader;
                 document.getElementById('loaderSection').style.display = 'block';
 
                 loadUserScripts(data.script_name);
