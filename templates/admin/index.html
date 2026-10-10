@@ -14,6 +14,7 @@
         .btn-primary { background: #6366f1; color: white; width: 100%; }
         .btn-danger { background: #ef4444; color: white; }
         .btn-success { background: #10b981; color: white; }
+        .btn-warning { background: #f59e0b; color: white; }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { padding: 10px; border-bottom: 1px solid #27272a; text-align: left; font-size: 14px; }
@@ -29,7 +30,6 @@
         <input type="text" id="username" placeholder="개발자 아이디">
         <input type="password" id="password" placeholder="비밀번호">
         
-        <!-- 회원가입 시에만 나타나는 라이센스 코드 입력란 -->
         <div id="inviteBox" style="display: none;">
             <input type="text" id="inviteCode" placeholder="라이센스 코드 입력">
         </div>
@@ -80,7 +80,7 @@
 
         <!-- 생성된 키 목록 -->
         <div class="card">
-            <h3>발급된 키 목록</h3>
+            <h3>발급된 키 목록 (HWID 초기화 가능)</h3>
             <table>
                 <thead><tr><th>키</th><th>연동 스크립트</th><th>HWID</th><th>남은 기간</th><th>실행수</th><th>액션</th></tr></thead>
                 <tbody id="keyTable"></tbody>
@@ -194,7 +194,7 @@
     }
 
     async function generateKey() {
-        let scriptName = document.getElementById('keyScriptSelect').value;
+        let scriptName = document.getElementById('keyScriptSelect'].value;
         let type = document.getElementById('durationType').value;
         let amount = document.getElementById('durationAmount').value;
 
@@ -223,9 +223,28 @@
                 <td>${k.hwid}</td>
                 <td>${k.expiry}</td>
                 <td>${k.execs}</td>
-                <td><button class="btn-danger" onclick="deleteKey(${k.id})">삭제</button></td>
+                <td>
+                    <button class="btn-warning" onclick="resetHwid(${k.id})" style="padding: 6px 10px; margin-right: 4px;">HWID초기화</button>
+                    <button class="btn-danger" onclick="deleteKey(${k.id})" style="padding: 6px 10px;">삭제</button>
+                </td>
             </tr>`;
         });
+    }
+
+    async function resetHwid(id) {
+        if (!confirm("이 키의 HWID를 초기화하시겠습니까?")) return;
+        let res = await fetch('/api/admin/keys/reset_hwid', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: id})
+        });
+        let data = await res.json();
+        if (data.success) {
+            alert("HWID가 초기화되었습니다.");
+            loadKeys();
+        } else {
+            alert(data.message);
+        }
     }
 
     async function deleteKey(id) {
