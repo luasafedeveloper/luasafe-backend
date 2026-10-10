@@ -1,13 +1,12 @@
 from flask import Flask, request, render_template, jsonify, session
 from config import Config
-from models import db, Key, Script, Blacklist, Setting
+from models import db, Key, Script, Blacklist, Setting, User
 from utils.detector import is_browser
 from datetime import datetime, timedelta
 import random
 import string
 import requests
 import functools
-import base64
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -83,46 +82,11 @@ def domain_router(path):
         return render_template("user/index.html")
     return render_template("user/index.html")
 
-# --- 깔끔한 로더 처리 (POST 및 GET 모두 지원 + 자동 HWID 추출 전송) ---
+# --- 파라미터 없는 완전 깔끔한 로더 처리 (POST 요청으로 scriptkey 받음) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
     if is_browser(request):
-        # 브라우저 직접 접속 시 레드스톤가드 스타일의 깔끔한 템플릿 반환
-        key_arg = request.args.get('key', 'luasafe-SAMPLE-KEY')
-        lua_payload = f'''scriptkey = "{key_arg}"
-
-local hwid = "Unknown";
-if syn and syn.get_hwid() then hwid = syn.get_hwid();
-elseif gethwid then hwid = gethwid();
-elseif Fluxus and Fluxus.get_hwid() then hwid = Fluxus.get_hwid();
-elseif identifyexecutor then
-    local execName = identifyexecutor();
-    if execName == "Delta" or execName == "Hydrogen" then
-        hwid = execName .."_"..(getcustomasset and "secure" or "standard");
-    end
-end
-
-if not hwid or hwid == "Unknown" or hwid == "" then
-    game:GetService("Players").LocalPlayer:Kick("[Luasafe] Security Error: Invalid HWID.");
-    return;
-end
-
-local s, r = pcall(function()
-    return request({{
-        Url = "{request.url_root.rstrip('/')}/loader.lua",
-        Method = "POST",
-        Headers = {{ ["Content-Type"] = "application/json" }},
-        Body = game:GetService("HttpService"):JSONEncode({{ key = scriptkey, hwid = hwid }})
-    }})
-end);
-
-if s and r and r.StatusCode == 200 then
-    local f, err = loadstring(r.Body);
-    if f then f(); else warn("[Luasafe] Error: " .. tostring(err)); end
-else
-    game:GetService("Players").LocalPlayer:Kick("[Luasafe] Auth Failed.");
-end;'''
-        return lua_payload
+        return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Browser access denied.");'
 
     data = request.get_json(silent=True) or request.form or request.args
     key_str = str(data.get('key', '')).strip()
@@ -282,26 +246,52 @@ def admin_save_settings():
 def admin_get_settings():
     return jsonify({"webhook_url": get_setting("discord_webhook_url"), "kill_switch": get_setting("kill_switch")})
 
-# --- 유저 API (회원가입 / 키 자체 발급 포함) ---
-@app.route("/api/user/scripts")
-def user_scripts():
-    return jsonify([{"name": s.name, "description": s.description} for s in Script.query.filter_by(active=True).all()])
+# --- 유저 회원가입 및 로그인 API ---
+@app.route("/api/user/signup", methods=["POST"])
+def user_signup():
+    data = request.get_json() or {}
+    username = data.get("username", "").strip()
+    password = data.get("password", "").strip()
 
-@app.route("/api/user/register", methods=["POST"])
-def user_register_key():
-    # 유저가 직접 웹에서 키를 생성하는 회원가입 기능
-    try:
+    if not username or not password:
+        return jsonify({"success": False, "message": "아이디와 비밀번호를 모두 입력해주세요."}), 400
+
+    if User.query.filter_by(username=username).first():
+        return jsonify({"success": False, "message": "이미 존재하는 아이디입니다."}), 400
+
+    new_user = User(username=username, password=password)
+    db.session.add(new_user)
+    db.session.commit()
+    return jsonify({"success": True, "message": "회원가입이 완료되었습니다!"})
+
+@app.route("/api/user/login", methods=["POST"])
+def user_login():
+    data = request.get_json() or {}
+    username = data.get("username", "").strip()
+    password = data.get("password", "").strip()
+
+    user = User.query.filter_by(username=username, password=password).first()
+    if not user:
+        return jsonify({"success": False, "message": "아이디 또는 비밀번호가 일치하지 않습니다."}), 401
+
+    session['username'] = username
+    
+    # 로그인 시 해당 유저 전용 키가 없으면 자동으로 생성
+    existing_key = Key.query.filter_by(discord_id=f"User_{username}").first()
+    if not existing_key:
         chars = string.ascii_uppercase + string.digits
         random_part = ''.join(random.choices(chars, k=16))
         key_str = f"luasafe-{random_part[:4]}-{random_part[4:8]}-{random_part[8:12]}"
-        
-        expires = datetime.utcnow() + timedelta(hours=24) # 기본 24시간용 키 발급
-        new_key = Key(key=key_str, tier="Standard", status="ACTIVE", expires_at=expires, discord_id="User-Self")
-        db.session.add(new_key)
+        expires = datetime.utcnow() + timedelta(days=7)
+        existing_key = Key(key=key_str, tier="Standard", status="ACTIVE", expires_at=expires, discord_id=f"User_{username}")
+        db.session.add(existing_key)
         db.session.commit()
-        return jsonify({"success": True, "key": key_str})
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+
+    return jsonify({"success": True, "key": existing_key.key})
+
+@app.route("/api/user/scripts")
+def user_scripts():
+    return jsonify([{"name": s.name, "description": s.description} for s in Script.query.filter_by(active=True).all()])
 
 @app.route("/api/user/lookup", methods=["POST"])
 def user_lookup_key():
