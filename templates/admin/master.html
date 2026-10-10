@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master Secret Portal</title>
+    <style>
+        body { background-color: #0f0f12; color: #e1e1e6; font-family: sans-serif; margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 600px; margin-top: 50px; }
+        .card { background: #18181b; border: 1px solid #f59e0b; border-radius: 10px; padding: 20px; margin-bottom: 20px; box-shadow: 0 0 15px rgba(245, 158, 11, 0.2); }
+        h2 { color: #f59e0b; text-align: center; margin-top: 0; }
+        button { width: 100%; padding: 12px; background: #10b981; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 15px; }
+        button:hover { background: #059669; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 10px; border-bottom: 1px solid #27272a; text-align: left; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card">
+        <h2>👑 사장님 전용 비밀 라이센스 발급소</h2>
+        <p style="text-align: center; color: #a1a1aa; font-size: 13px;">이 페이지 주소는 절대 남들에게 유출하지 마세요!</p>
+        <button onclick="generateInvite()">친구 초대 라이센스 코드 생성하기</button>
+        
+        <table>
+            <thead><tr><th>라이센스 코드</th><th>사용 여부</th></tr></thead>
+            <tbody id="inviteTable"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    window.onload = function() {
+        loadInvites();
+    };
+
+    async function generateInvite() {
+        let res = await fetch('/api/secret/invite/generate', {method: 'POST'});
+        let data = await res.json();
+        if (data.success) {
+            alert("라이센스 발급 성공: " + data.code);
+            loadInvites();
+        } else {
+            alert("생성 실패");
+        }
+    }
+
+    async function loadInvites() {
+        let res = await fetch('/api/secret/invite/list');
+        let invites = await res.json();
+        let table = document.getElementById('inviteTable');
+        table.innerHTML = '';
+        invites.forEach(i => {
+            table.innerHTML += `<tr>
+                <td><code>${i.code}</code></td>
+                <td>${i.used ? '<span style="color:#ef4444;">사용됨</span>' : '<span style="color:#10b981;">미사용 (사용 가능)</span>'}</td>
+            </tr>`;
+        });
+    }
+</script>
+
+</body>
+</html>
