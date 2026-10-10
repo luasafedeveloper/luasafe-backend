@@ -1,6 +1,6 @@
 from flask import Flask, request, render_template, jsonify, session
 from config import Config
-from models import db, Key, Script, Blacklist, Setting, User
+from models import db, Key, Script, Blacklist, Setting, User, InviteCode
 from datetime import datetime, timedelta
 import random
 import string
@@ -22,7 +22,7 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# --- URL 라우터 (유저 페이지 및 관리자 포털 분리) ---
+# --- URL 라우터 ---
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def domain_router(path):
@@ -34,7 +34,7 @@ def domain_router(path):
         return render_template("user/index.html")
     return render_template("user/index.html")
 
-# --- 스마트 로더 (브라우저 차단 오인식 문제 해결 완료) ---
+# --- 스마트 로더 ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
     if request.method == 'GET':
@@ -93,22 +93,31 @@ pcall(function()
     {script.lua_code}
 end)"""
 
-# --- 개발자 계정 회원가입 / 로그인 / 세션 API ---
+# --- 개발자 회원가입 (라이센스 코드 검증 필수) ---
 @app.route('/api/admin/register', methods=['POST'])
 def dev_register():
     data = request.get_json() or {}
     username = data.get('username', '').strip()
     password = data.get('password', '').strip()
+    invite_code = data.get('invite_code', '').strip()
 
-    if not username or not password:
-        return jsonify({'success': False, 'message': '아이디와 비밀번호를 모두 입력해주세요.'}), 400
+    if not username or not password or not invite_code:
+        return jsonify({'success': False, 'message': '아이디, 비밀번호, 라이센스 코드를 모두 입력해주세요.'}), 400
+
+    # 라이센스 코드 확인
+    invite = InviteCode.query.filter_by(code=invite_code, used=False).first()
+    if not invite:
+        return jsonify({'success': False, 'message': '유효하지 않거나 이미 사용된 라이센스 코드입니다.'}), 400
 
     if User.query.filter_by(username=username).first():
         return jsonify({'success': False, 'message': '이미 존재하는 개발자 아이디입니다.'}), 400
 
+    # 회원가입 진행 및 라이센스 사용 처리
     user = User(username=username, password=password)
     db.session.add(user)
+    invite.used = True
     db.session.commit()
+    
     return jsonify({'success': True, 'message': '개발자 회원가입 완료! 로그인해주세요.'})
 
 @app.route('/api/admin/login', methods=['POST'])
@@ -121,14 +130,15 @@ def dev_login():
     if user:
         session['user_id'] = user.id
         session['username'] = user.username
-        return jsonify({'success': True, 'username': user.username})
+        return jsonify({'success': True, 'username': user.username, 'is_master': (username == 'mineminyee')})
 
     return jsonify({'success': False, 'message': '아이디 또는 비밀번호가 틀렸습니다.'}), 401
 
 @app.route('/api/admin/check_session')
 def dev_check_session():
     if session.get('user_id'):
-        return jsonify({'logged_in': True, 'username': session.get('username')})
+        username = session.get('username')
+        return jsonify({'logged_in': True, 'username': username, 'is_master': (username == 'mineminyee')})
     return jsonify({'logged_in': False})
 
 @app.route('/api/admin/logout', methods=['POST'])
@@ -136,7 +146,31 @@ def dev_logout():
     session.clear()
     return jsonify({'success': True})
 
-# --- 개발자 전용 대시보드 API ---
+# --- 마스터 전용 라이센스 코드 생성 API ---
+@app.route('/api/admin/invite/generate', methods=['POST'])
+@login_required
+def generate_invite():
+    if session.get('username') != 'mineminyee':
+        return jsonify({'success': False, 'message': '권한이 없습니다.'}), 403
+
+    chars = string.ascii_uppercase + string.digits
+    random_part = ''.join(random.choices(chars, k=12))
+    code_str = f"LUASAFE-INVITE-{random_part}"
+
+    new_invite = InviteCode(code=code_str, used=False)
+    db.session.add(new_invite)
+    db.session.commit()
+    return jsonify({'success': True, 'code': code_str})
+
+@app.route('/api/admin/invite/list', methods=['GET'])
+@login_required
+def list_invites():
+    if session.get('username') != 'mineminyee':
+        return jsonify([])
+    invites = InviteCode.query.order_by(InviteCode.created_at.desc()).all()
+    return jsonify([{"code": i.code, "used": i.used} for i in invites])
+
+# --- 개발자 대시보드 API ---
 @app.route('/api/admin/scripts/add', methods=['POST'])
 @login_required
 def add_script_api():
