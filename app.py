@@ -82,7 +82,7 @@ def domain_router(path):
         return render_template("user/index.html")
     return render_template("user/index.html")
 
-# --- 파라미터 없는 완전 깔끔한 로더 처리 (POST 요청으로 scriptkey 받음) ---
+# --- 확실하게 작동하는 파라미터 포함 로더 처리 ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
     if is_browser(request):
@@ -126,13 +126,24 @@ pcall(function()
     {script.lua_code}
 end)"""
 
-# --- 관리자 API ---
+# --- 관리자 로그인 (기존 mineminyee 계정 유지 + 회원가입 유저도 관리자로 로그인 가능하게 통합) ---
 @app.route('/api/admin/login', methods=['POST'])
 def admin_login():
     data = request.get_json() or {}
-    if data.get('username') == 'mineminyee' and data.get('password') == 'sk521400^^':
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()
+
+    # 기존 마스터 관리자 계정 체크
+    if username == 'mineminyee' and password == 'sk521400^^':
         session['is_admin'] = True
         return jsonify({'success': True})
+
+    # 회원가입한 유저 계정으로도 관리자 로그인 가능하게 체크
+    user = User.query.filter_by(username=username, password=password).first()
+    if user:
+        session['is_admin'] = True
+        return jsonify({'success': True})
+
     return jsonify({'success': False, 'message': '아이디 또는 비밀번호 틀림'}), 401
 
 @app.route('/api/admin/logout', methods=['POST'])
@@ -246,7 +257,7 @@ def admin_save_settings():
 def admin_get_settings():
     return jsonify({"webhook_url": get_setting("discord_webhook_url"), "kill_switch": get_setting("kill_switch")})
 
-# --- 유저 회원가입 및 로그인 API ---
+# --- 회원가입 API ---
 @app.route("/api/user/signup", methods=["POST"])
 def user_signup():
     data = request.get_json() or {}
@@ -264,31 +275,7 @@ def user_signup():
     db.session.commit()
     return jsonify({"success": True, "message": "회원가입이 완료되었습니다!"})
 
-@app.route("/api/user/login", methods=["POST"])
-def user_login():
-    data = request.get_json() or {}
-    username = data.get("username", "").strip()
-    password = data.get("password", "").strip()
-
-    user = User.query.filter_by(username=username, password=password).first()
-    if not user:
-        return jsonify({"success": False, "message": "아이디 또는 비밀번호가 일치하지 않습니다."}), 401
-
-    session['username'] = username
-    
-    # 로그인 시 해당 유저 전용 키가 없으면 자동으로 생성
-    existing_key = Key.query.filter_by(discord_id=f"User_{username}").first()
-    if not existing_key:
-        chars = string.ascii_uppercase + string.digits
-        random_part = ''.join(random.choices(chars, k=16))
-        key_str = f"luasafe-{random_part[:4]}-{random_part[4:8]}-{random_part[8:12]}"
-        expires = datetime.utcnow() + timedelta(days=7)
-        existing_key = Key(key=key_str, tier="Standard", status="ACTIVE", expires_at=expires, discord_id=f"User_{username}")
-        db.session.add(existing_key)
-        db.session.commit()
-
-    return jsonify({"success": True, "key": existing_key.key})
-
+# --- 유저 키 조회 API ---
 @app.route("/api/user/scripts")
 def user_scripts():
     return jsonify([{"name": s.name, "description": s.description} for s in Script.query.filter_by(active=True).all()])
