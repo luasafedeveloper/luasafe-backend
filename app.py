@@ -82,7 +82,7 @@ def domain_router(path):
         return render_template("user/index.html")
     return render_template("user/index.html")
 
-# --- 확실하게 작동하는 파라미터 포함 로더 처리 ---
+# --- 확실하게 작동하는 파라미터 기반 로더 처리 ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
     if is_browser(request):
@@ -126,25 +126,23 @@ pcall(function()
     {script.lua_code}
 end)"""
 
-# --- 관리자 로그인 (기존 mineminyee 계정 유지 + 회원가입 유저도 관리자로 로그인 가능하게 통합) ---
+# --- 관리자 로그인 (마스터 계정 mineminyee + 회원가입한 관리자 계정 통합) ---
 @app.route('/api/admin/login', methods=['POST'])
 def admin_login():
     data = request.get_json() or {}
     username = data.get('username', '').strip()
     password = data.get('password', '').strip()
 
-    # 기존 마스터 관리자 계정 체크
     if username == 'mineminyee' and password == 'sk521400^^':
         session['is_admin'] = True
         return jsonify({'success': True})
 
-    # 회원가입한 유저 계정으로도 관리자 로그인 가능하게 체크
     user = User.query.filter_by(username=username, password=password).first()
     if user:
         session['is_admin'] = True
         return jsonify({'success': True})
 
-    return jsonify({'success': False, 'message': '아이디 또는 비밀번호 틀림'}), 401
+    return jsonify({'success': False, 'message': '아이디 또는 비밀번호가 틀렸습니다.'}), 401
 
 @app.route('/api/admin/logout', methods=['POST'])
 def admin_logout():
@@ -257,7 +255,7 @@ def admin_save_settings():
 def admin_get_settings():
     return jsonify({"webhook_url": get_setting("discord_webhook_url"), "kill_switch": get_setting("kill_switch")})
 
-# --- 회원가입 API ---
+# --- 관리자 회원가입 API ---
 @app.route("/api/user/signup", methods=["POST"])
 def user_signup():
     data = request.get_json() or {}
@@ -275,7 +273,7 @@ def user_signup():
     db.session.commit()
     return jsonify({"success": True, "message": "회원가입이 완료되었습니다!"})
 
-# --- 유저 키 조회 API ---
+# --- 유저 스크립트 및 키 정확도 향상 조회 API ---
 @app.route("/api/user/scripts")
 def user_scripts():
     return jsonify([{"name": s.name, "description": s.description} for s in Script.query.filter_by(active=True).all()])
@@ -284,10 +282,14 @@ def user_scripts():
 def user_lookup_key():
     data = request.json or {}
     key_str = data.get("key", "").strip()
+
+    if not key_str:
+        return jsonify({"success": False, "message": "키를 입력해주세요."}), 400
+
     key_obj = Key.query.filter_by(key=key_str).first()
     if not key_obj:
         return jsonify({"success": False, "message": "존재하지 않는 키입니다."}), 404
-        
+
     return jsonify({
         "success": True,
         "key": key_obj.key,
