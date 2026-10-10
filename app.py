@@ -82,13 +82,34 @@ def domain_router(path):
         return render_template("user/index.html")
     return render_template("user/index.html")
 
-# --- 확실하게 작동하는 파라미터 기반 로더 처리 ---
+# --- 파라미터 없는 스마트 로더 처리 (GET은 스크립트 반환, POST는 인증 및 실행 코드 반환) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
     if is_browser(request):
         return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Browser access denied.");'
 
-    data = request.get_json(silent=True) or request.form or request.args
+    if request.method == 'GET':
+        lua_payload = '''local s, r = pcall(function()
+    return request({
+        Url = "https://luasafe-backend.onrender.com/loader.lua",
+        Method = "POST",
+        Headers = { ["Content-Type"] = "application/json" },
+        Body = game:GetService("HttpService"):JSONEncode({
+            key = scriptkey,
+            hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())
+        })
+    })
+end);
+
+if s and r and r.StatusCode == 200 then
+    local f, err = loadstring(r.Body);
+    if f then f(); else warn("[Luasafe Error] " .. tostring(err)); end
+else
+    game:GetService("Players").LocalPlayer:Kick("[Luasafe] Auth Failed or Connection Error.");
+end;'''
+        return lua_payload
+
+    data = request.get_json(silent=True) or request.form or {}
     key_str = str(data.get('key', '')).strip()
     client_hwid = str(data.get('hwid', '')).strip()
 
@@ -126,7 +147,7 @@ pcall(function()
     {script.lua_code}
 end)"""
 
-# --- 관리자 로그인 (마스터 계정 mineminyee + 회원가입한 관리자 계정 통합) ---
+# --- 관리자 로그인 (마스터 mineminyee + 회원가입 계정 통합) ---
 @app.route('/api/admin/login', methods=['POST'])
 def admin_login():
     data = request.get_json() or {}
@@ -255,7 +276,7 @@ def admin_save_settings():
 def admin_get_settings():
     return jsonify({"webhook_url": get_setting("discord_webhook_url"), "kill_switch": get_setting("kill_switch")})
 
-# --- 관리자 회원가입 API ---
+# --- 회원가입 API ---
 @app.route("/api/user/signup", methods=["POST"])
 def user_signup():
     data = request.get_json() or {}
@@ -273,7 +294,7 @@ def user_signup():
     db.session.commit()
     return jsonify({"success": True, "message": "회원가입이 완료되었습니다!"})
 
-# --- 유저 스크립트 및 키 정확도 향상 조회 API ---
+# --- 유저 조회 API ---
 @app.route("/api/user/scripts")
 def user_scripts():
     return jsonify([{"name": s.name, "description": s.description} for s in Script.query.filter_by(active=True).all()])
