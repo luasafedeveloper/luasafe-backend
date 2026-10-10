@@ -28,6 +28,12 @@
         <h2 id="authTitle" style="text-align: center;">개발자 로그인</h2>
         <input type="text" id="username" placeholder="개발자 아이디">
         <input type="password" id="password" placeholder="비밀번호">
+        
+        <!-- 회원가입 시에만 보이는 라이센스 코드 입력란 -->
+        <div id="inviteBox" style="display: none;">
+            <input type="text" id="inviteCode" placeholder="라이센스 코드 (초대 코드)">
+        </div>
+
         <button id="authBtn" class="btn-primary" onclick="handleAuth()">로그인</button>
         <div id="toggleAuth" class="link-btn" onclick="toggleAuthMode()">계정이 없으신가요? 회원가입하기</div>
     </div>
@@ -37,6 +43,16 @@
         <div class="header">
             <h2>Welcome, <span id="devName" style="color: #818cf8;"></span>!</h2>
             <button class="btn-danger" onclick="logout()">로그아웃</button>
+        </div>
+
+        <!-- 마스터(mineminyee) 전용 라이센스 코드 생성 패널 -->
+        <div class="card" id="masterPanel" style="display: none; border: 1px solid #f59e0b;">
+            <h3 style="color: #f59e0b;">👑 마스터 전용: 친구 초대 라이센스 생성</h3>
+            <button class="btn-success" onclick="generateInvite()">새 라이센스 코드 발급하기</button>
+            <table>
+                <thead><tr><th>라이센스 코드</th><th>사용 여부</th></tr></thead>
+                <tbody id="inviteTable"></tbody>
+            </table>
         </div>
 
         <!-- 스크립트 등록 -->
@@ -89,7 +105,7 @@
     window.onload = async function() {
         let res = await fetch('/api/admin/check_session');
         let data = await res.json();
-        if (data.logged_in) showDashboard(data.username);
+        if (data.logged_in) showDashboard(data.username, data.is_master);
     };
 
     function toggleAuthMode() {
@@ -97,6 +113,7 @@
         document.getElementById('authTitle').innerText = isRegisterMode ? "개발자 회원가입" : "개발자 로그인";
         document.getElementById('authBtn').innerText = isRegisterMode ? "회원가입" : "로그인";
         document.getElementById('toggleAuth').innerText = isRegisterMode ? "이미 계정이 있으신가요? 로그인하기" : "계정이 없으신가요? 회원가입하기";
+        document.getElementById('inviteBox').style.display = isRegisterMode ? "block" : "none";
     }
 
     async function handleAuth() {
@@ -104,11 +121,18 @@
         let p = document.getElementById('password').value.trim();
         if (!u || !p) return alert("아이디와 비밀번호를 입력해주세요.");
 
+        let bodyData = {username: u, password: p};
+        if (isRegisterMode) {
+            let invite = document.getElementById('inviteCode').value.trim();
+            if (!invite) return alert("라이센스 코드를 입력해주세요.");
+            bodyData.invite_code = invite;
+        }
+
         let url = isRegisterMode ? '/api/admin/register' : '/api/admin/login';
         let res = await fetch(url, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({username: u, password: p})
+            body: JSON.stringify(bodyData)
         });
         let data = await res.json();
         if (data.success) {
@@ -116,15 +140,21 @@
                 alert(data.message);
                 toggleAuthMode();
             } else {
-                showDashboard(data.username);
+                showDashboard(data.username, data.is_master);
             }
         } else alert(data.message);
     }
 
-    function showDashboard(username) {
+    function showDashboard(username, isMaster) {
         document.getElementById('authSection').style.display = 'none';
         document.getElementById('dashboardSection').style.display = 'block';
         document.getElementById('devName').innerText = username;
+
+        if (username === 'mineminyee' || isMaster) {
+            document.getElementById('masterPanel').style.display = 'block';
+            loadInvites();
+        }
+
         loadScripts();
         loadKeys();
     }
@@ -132,6 +162,28 @@
     async function logout() {
         await fetch('/api/admin/logout', {method: 'POST'});
         location.reload();
+    }
+
+    async function generateInvite() {
+        let res = await fetch('/api/admin/invite/generate', {method: 'POST'});
+        let data = await res.json();
+        if (data.success) {
+            alert("라이센스 발급 성공: " + data.code);
+            loadInvites();
+        } else alert(data.message);
+    }
+
+    async function loadInvites() {
+        let res = await fetch('/api/admin/invite/list');
+        let invites = await res.json();
+        let table = document.getElementById('inviteTable');
+        table.innerHTML = '';
+        invites.forEach(i => {
+            table.innerHTML += `<tr>
+                <td><code>${i.code}</code></td>
+                <td>${i.used ? '사용됨' : '미사용 (사용 가능)'}</td>
+            </tr>`;
+        });
     }
 
     async function saveScript() {
