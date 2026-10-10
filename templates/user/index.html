@@ -3,124 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Luasafe - Key & Script Hub</title>
+    <title>Luasafe - Key & Loader Hub</title>
     <style>
-        body {
-            background-color: #0d0d0d;
-            color: #ffffff;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-        }
-        .container {
-            background-color: #141414;
-            border: 1px solid #262626;
-            border-radius: 12px;
-            width: 100%;
-            max-width: 450px;
-            padding: 25px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-        }
-        h2 {
-            text-align: center;
-            margin-bottom: 20px;
-            font-size: 22px;
-        }
-        .section {
-            margin-bottom: 20px;
-        }
-        label {
-            display: block;
-            font-size: 13px;
-            color: #a0a0a0;
-            margin-bottom: 8px;
-        }
-        input, select {
-            width: 100%;
-            padding: 12px;
-            background-color: #1f1f1f;
-            border: 1px solid #333;
-            border-radius: 8px;
-            color: #fff;
-            font-size: 14px;
-            box-sizing: border-box;
-            margin-bottom: 10px;
-        }
-        input:focus, select:focus {
-            border-color: #f39c12;
-            outline: none;
-        }
-        button {
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: 0.2s;
-            margin-bottom: 8px;
-        }
-        .btn-primary { background-color: #ffffff; color: #000000; }
-        .btn-primary:hover { background-color: #dcdcdc; }
-        .btn-warning { background-color: #f39c12; color: #000000; }
-        .btn-warning:hover { background-color: #e67e22; }
-        pre {
-            background-color: #0a0a0a;
-            border: 1px solid #222;
-            padding: 12px;
-            border-radius: 8px;
-            overflow-x: auto;
-            font-size: 12px;
-            color: #2ecc71;
-            max-height: 150px;
-        }
-        .info-box {
-            background-color: #1a1a1a;
-            border-radius: 8px;
-            padding: 12px;
-            font-size: 13px;
-            margin-top: 15px;
-            border: 1px solid #262626;
-        }
+        body { background-color: #0f0f12; color: #e1e1e6; font-family: sans-serif; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .container { width: 100%; max-width: 450px; background: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 25px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+        h2 { text-align: center; margin-bottom: 20px; }
+        .section { margin-bottom: 20px; }
+        label { display: block; font-size: 13px; color: #a1a1aa; margin-bottom: 6px; }
+        input { width: 100%; padding: 12px; background: #27272a; border: 1px solid #3f3f46; border-radius: 8px; color: #fff; box-sizing: border-box; margin-bottom: 10px; }
+        button { width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .btn-primary { background: #6366f1; color: white; }
+        .btn-warning { background: #f59e0b; color: #000; margin-top: 10px; }
+        pre { background: #09090b; border: 1px solid #27272a; padding: 12px; border-radius: 8px; color: #10b981; font-size: 12px; overflow-x: auto; max-height: 150px; }
+        .info-box { background: #1f1f23; border-radius: 8px; padding: 12px; font-size: 13px; margin-top: 15px; border: 1px solid #27272a; }
         .info-box div { margin-bottom: 6px; }
+        .portal-link { text-align: center; margin-top: 15px; font-size: 13px; }
+        .portal-link a { color: #818cf8; text-decoration: none; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>Luasafe Hub</h2>
+    <h2>Luasafe Loader Hub</h2>
 
-    <!-- 키 입력 및 스크립트 발급 섹션 -->
+    <!-- 키 입력 영역 -->
     <div class="section">
-        <label>키 등록 및 스크립트 발급</label>
-        <input type="text" id="keyInput" placeholder="luasafe-XXXX-XXXX-XXXX 키를 입력하세요">
-        <button class="btn-primary" onclick="lookupKey()">스크립트 발급 및 정보 확인</button>
+        <label>발급받은 키 입력</label>
+        <input type="text" id="keyInput" placeholder="luasafe-XXXX-XXXX-XXXX">
+        <button class="btn-primary" onclick="lookupKey()">로더 코드 발급받기</button>
     </div>
 
-    <!-- 파라미터 없는 깔끔한 로더 출력 영역 -->
+    <!-- 생성된 로더 코드 출력 영역 -->
     <div class="section" id="loaderSection" style="display:none;">
-        <label>생성된 로더 코드 (복사해서 사용)</label>
+        <label>복사해서 게임에 실행할 로더 코드</label>
         <pre id="loaderOutput"></pre>
         <button class="btn-primary" onclick="copyLoader()">로더 코드 복사하기</button>
     </div>
 
-    <!-- 키 상세 정보 및 관리 영역 -->
+    <!-- 키 상세 정보 -->
     <div class="info-box" id="infoBox" style="display:none;">
         <div><strong>상태:</strong> <span id="statusText">-</span></div>
-        <div><strong>등급:</strong> <span id="tierText">-</span></div>
+        <div><strong>연동 스크립트:</strong> <span id="scriptText" style="color:#818cf8;">-</span></div>
         <div><strong>만료 시간:</strong> <span id="expiryText">-</span></div>
         <div><strong>등록된 HWID:</strong> <span id="hwidText">-</span></div>
         
-        <div style="margin-top: 12px;">
-            <label>사용할 스크립트 선택</label>
-            <select id="scriptSelect"></select>
-        </div>
-        <button class="btn-warning" onclick="resetHwid()" style="margin-top: 10px;">HWID 초기화 및 스크립트 변경 (3일 쿨타임)</button>
+        <button class="btn-warning" onclick="resetHwid()">HWID 초기화 (3일 쿨타임)</button>
+    </div>
+
+    <div class="portal-link">
+        <a href="/admin" target="_blank">👉 개발자 포털 (스크립트/키 관리) 가기</a>
     </div>
 </div>
 
@@ -129,80 +60,46 @@
 
     async function lookupKey() {
         let key = document.getElementById('keyInput').value.trim();
-        if (!key) {
-            alert("키를 입력해주세요!");
-            return;
-        }
+        if (!key) return alert("키를 입력해주세요.");
         currentKey = key;
 
-        try {
-            let res = await fetch('/api/user/lookup', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key: key })
-            });
-            let data = await res.json();
+        let res = await fetch('/api/user/lookup', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({key: key})
+        });
+        let data = await res.json();
 
-            if (data.success) {
-                document.getElementById('statusText').innerText = data.status;
-                document.getElementById('tierText').innerText = data.tier;
-                document.getElementById('expiryText').innerText = data.expiry;
-                document.getElementById('hwidText').innerText = data.hwid;
-                document.getElementById('infoBox').style.display = 'block';
+        if (data.success) {
+            document.getElementById('statusText').innerText = data.status;
+            document.getElementById('scriptText').innerText = data.script_name || '전체 허브';
+            document.getElementById('expiryText').innerText = data.expiry;
+            document.getElementById('hwidText').innerText = data.hwid;
+            document.getElementById('infoBox').style.display = 'block';
 
-                let cleanLoader = `scriptkey = "${data.key}"\n\nloadstring(game:HttpGet("https://luasafe-backend.onrender.com/loader.lua"))()`;
-                
-                document.getElementById('loaderOutput').innerText = cleanLoader;
-                document.getElementById('loaderSection').style.display = 'block';
-
-                loadUserScripts(data.script_name);
-            } else {
-                alert(data.message);
-            }
-        } catch (e) {
-            alert("조회 중 오류가 발생했습니다.");
+            let cleanLoader = `scriptkey = "${data.key}"\n\nloadstring(game:HttpGet("https://luasafe-backend.onrender.com/loader.lua"))()`;
+            document.getElementById('loaderOutput').innerText = cleanLoader;
+            document.getElementById('loaderSection').style.display = 'block';
+        } else {
+            alert(data.message);
         }
-    }
-
-    async function loadUserScripts(selectedName) {
-        try {
-            let res = await fetch('/api/user/scripts');
-            let scripts = await res.json();
-            let select = document.getElementById('scriptSelect');
-            select.innerHTML = '';
-            scripts.forEach(s => {
-                let opt = document.createElement('option');
-                opt.value = s.name;
-                opt.innerText = s.name + (s.description ? ` (${s.description})` : '');
-                if (s.name === selectedName) opt.selected = true;
-                select.appendChild(opt);
-            });
-        } catch (e) {}
     }
 
     async function resetHwid() {
-        if (!confirm("정말 HWID를 초기화하시겠습니까? (3일 동안 재초기화 불가)")) return;
-        let newScript = document.getElementById('scriptSelect').value;
-
-        try {
-            let res = await fetch('/api/user/reset_hwid', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key: currentKey, script_name: newScript })
-            });
-            let data = await res.json();
-            alert(data.message);
-            if (data.success) lookupKey();
-        } catch (e) {
-            alert("통신 오류");
-        }
+        if (!confirm("HWID를 초기화하시겠습니까? (3일 쿨타임)")) return;
+        let res = await fetch('/api/user/reset_hwid', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: json = JSON.stringify({key: currentKey})
+        });
+        let data = await res.json();
+        alert(data.message);
+        if (data.success) lookupKey();
     }
 
     function copyLoader() {
         let code = document.getElementById('loaderOutput').innerText;
-        navigator.clipboard.writeText(code).then(() => {
-            alert("로더 코드가 복사되었습니다!");
-        });
+        navigator.clipboard.writeText(code).then(() => alert("로더 코드가 복사되었습니다!"));
     }
 </script>
 
