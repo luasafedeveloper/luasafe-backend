@@ -9,6 +9,12 @@ class User(db.Model):
     password = db.Column(db.String(120), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+class InviteCode(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(100), unique=True, nullable=False)
+    used = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 class Script(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
