@@ -23,12 +23,17 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# --- URL 라우터 (메인 유저는 유저 페이지, /admin은 개발자 포털로 분리) ---
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def domain_router(path):
+    if path == "admin" or path.startswith("admin/"):
+        if not path.startswith("api/"):
+            return render_template("admin/index.html")
+
     if not path.startswith("api/"):
-        return render_template("admin/index.html")
-    return render_template("admin/index.html")
+        return render_template("user/index.html")
+    return render_template("user/index.html")
 
 # --- 멀티 개발자 지원 스마트 로더 ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
@@ -135,7 +140,7 @@ def dev_logout():
     session.clear()
     return jsonify({'success': True})
 
-# --- 개발자 전용 대시보드 API (본인 데이터만 조회/수정) ---
+# --- 개발자 전용 대시보드 API ---
 @app.route('/api/admin/scripts/add', methods=['POST'])
 @login_required
 def add_script_api():
@@ -230,6 +235,47 @@ def admin_generate():
         return jsonify({"success": True, "key": key_str})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
+
+# --- 일반 유저용 키 조회 및 로더 발급 API ---
+@app.route("/api/user/lookup", methods=["POST"])
+def user_lookup_key():
+    data = request.json or {}
+    key_str = data.get("key", "").strip()
+
+    if not key_str:
+        return jsonify({"success": False, "message": "키를 입력해주세요."}), 400
+
+    key_obj = Key.query.filter_by(key=key_str).first()
+    if not key_obj:
+        return jsonify({"success": False, "message": "존재하지 않는 키입니다."}), 404
+
+    return jsonify({
+        "success": True,
+        "key": key_obj.key,
+        "tier": key_obj.tier,
+        "status": key_obj.status,
+        "hwid": key_obj.hwid if key_obj.hwid else "UNBOUND",
+        "expiry": key_obj.remaining_time(),
+        "execs": key_obj.exec_count,
+        "script_name": key_obj.script_name
+    })
+
+@app.route("/api/user/reset_hwid", methods=["POST"])
+def user_reset_hwid():
+    data = request.json or {}
+    key_str = data.get("key", "").strip()
+    
+    key_obj = Key.query.filter_by(key=key_str).first()
+    if not key_obj:
+        return jsonify({"success": False, "message": "키를 찾을 수 없습니다."}), 404
+        
+    if key_obj.last_hwid_reset and datetime.utcnow() < key_obj.last_hwid_reset + timedelta(days=3):
+        return jsonify({"success": False, "message": "HWID 초기화 쿨타임 중입니다. (3일)"}), 400
+
+    key_obj.hwid = "UNBOUND"
+    key_obj.last_hwid_reset = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"success": True, "message": "HWID 초기화 완료!"})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
