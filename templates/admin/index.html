@@ -2,276 +2,88 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>luasafe Admin - Luarmor Style</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luasafe Admin Hub</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
-        body { background: #000; color: #fff; min-height: 100vh; background-image: linear-gradient(135deg, #111 0%, #000 100%); }
-        .hidden { display: none !important; }
-        .login-wrapper { display: flex; justify-content: center; align-items: center; height: 100vh; }
-        .login-card { width: 100%; max-width: 380px; background: #141414; border: 1px solid #333; padding: 30px; border-radius: 12px; }
-        .login-card h2 { margin-bottom: 20px; font-size: 1.5rem; }
-        .dashboard { max-width: 1280px; margin: 0 auto; padding: 40px 20px; }
-        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 1px solid #222; padding-bottom: 20px; }
-        header h1 { font-size: 1.8rem; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-        .card { background: #141414; border: 1px solid #262626; border-radius: 10px; padding: 25px; }
-        .card h2 { font-size: 1.2rem; margin-bottom: 15px; border-left: 3px solid #fff; padding-left: 10px; }
-        label { display: block; font-size: 0.85rem; color: #aaa; margin-bottom: 6px; margin-top: 12px; }
-        input, select, textarea { width: 100%; padding: 12px; background: #000; border: 1px solid #333; color: #fff; border-radius: 6px; font-size: 0.95rem; }
-        button { width: 100%; padding: 12px; background: #fff; color: #000; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 15px; }
-        button:hover { opacity: 0.85; }
-        .btn-danger { background: #ff4d4d !important; color: #fff !important; }
-        .btn-warning { background: #ffaa00 !important; color: #000 !important; width: auto; padding: 6px 12px; font-size: 0.8rem; }
-        .btn-del { background: #444 !important; color: #fff !important; width: auto; padding: 6px 12px; font-size: 0.8rem; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #1f1f1f; font-size: 0.9rem; }
-        th { color: #888; background: #080808; }
-        code { background: #1a1a1a; padding: 3px 6px; border-radius: 4px; color: #ddd; font-family: monospace; }
+        body { background-color: #0d0d0d; color: #fff; font-family: sans-serif; margin: 0; padding: 20px; }
+        .login-container { max-width: 400px; margin: 100px auto; background: #141414; padding: 25px; border-radius: 12px; border: 1px solid #262626; text-align: center; }
+        input { width: 100%; padding: 12px; margin-bottom: 10px; background: #1f1f1f; border: 1px solid #333; color: #fff; border-radius: 8px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 8px; }
+        .btn-primary { background: #fff; color: #000; }
+        .btn-success { background: #27ae60; color: #fff; }
+        .link-text { font-size: 13px; color: #a0a0a0; cursor: pointer; margin-top: 10px; }
+        .link-text span { color: #f39c12; text-decoration: underline; }
     </style>
 </head>
 <body>
 
-    <div id="loginSection" class="login-wrapper">
-        <div class="login-card">
-            <h2>Admin Login</h2>
-            <input type="text" id="adminUser" placeholder="Username">
-            <input type="password" id="adminPass" placeholder="Password">
-            <button onclick="login()">Login</button>
-            <p id="loginMsg" style="color: #ff4d4d; margin-top: 10px; font-size: 0.85rem; text-align: center;"></p>
-        </div>
-    </div>
+<div id="loginSection" class="login-container">
+    <h2 id="formTitle">Admin Login</h2>
+    <input type="text" id="adminUser" placeholder="Username">
+    <input type="password" id="adminPass" placeholder="Password">
+    <button id="authBtn" class="btn-primary" onclick="handleAdminAuth()">Login</button>
+    <div class="link-text" id="toggleLink" onclick="toggleAdminMode()">계정이 없나요? <span>관리자 회원가입하기</span></div>
+</div>
 
-    <div id="dashSection" class="dashboard hidden">
-        <header>
-            <h1>luasafe Management</h1>
-            <button id="killSwitchBtn" class="btn-danger" style="width: auto; margin-top:0;" onclick="toggleKillSwitch()">🚨 킬스위치 OFF</button>
-        </header>
-
-        <div class="grid">
-            <div class="card">
-                <h2>디스코드 웹훅 설정</h2>
-                <label>디스코드 웹훅 URL</label>
-                <input type="text" id="settingWebhook" placeholder="https://discord.com/api/webhooks/...">
-                <button onclick="saveSettings()">설정 저장</button>
-            </div>
-
-            <div class="card">
-                <h2>스크립트별 키 생성</h2>
-                <label>대상 스크립트</label>
-                <select id="genScriptSelect"></select>
-                <label>기간 설정</label>
-                <select id="genDurationType" onchange="toggleDurationInput()">
-                    <option value="Hours">시간 (Hours)</option>
-                    <option value="Days">일 (Days)</option>
-                    <option value="Lifetime">평생 (Lifetime)</option>
-                </select>
-                <div id="amountWrapper">
-                    <label>수치 입력</label>
-                    <input type="number" id="genAmount" value="24">
-                </div>
-                <button onclick="generateKey()">키 발급</button>
-                <p id="genResult" style="margin-top:10px; color:#fff; word-break:break-all; font-size:0.9rem;"></p>
-            </div>
-        </div>
-
-        <div class="card" style="margin-bottom: 20px;">
-            <h2>스크립트 관리 및 수정</h2>
-            <div class="grid" style="margin-bottom:0;">
-                <div>
-                    <label>스크립트 이름</label>
-                    <input type="text" id="scriptName" placeholder="loader.lua">
-                    <label>설명</label>
-                    <input type="text" id="scriptDesc" placeholder="설명 입력">
-                </div>
-                <div>
-                    <label>Lua 코드</label>
-                    <textarea id="scriptCode" placeholder="print('Hello World')" style="height: 110px; font-family: monospace;"></textarea>
-                </div>
-            </div>
-            <button onclick="saveScript()">스크립트 등록 / 수정 저장</button>
-
-            <table style="margin-top:20px;">
-                <thead>
-                    <tr><th>파일명</th><th>설명</th><th>상태</th><th>액션</th></tr>
-                </thead>
-                <tbody id="scriptTableBody"></tbody>
-            </table>
-        </div>
-
-        <div class="card">
-            <h2>활성 키 목록</h2>
-            <table>
-                <thead>
-                    <tr><th>키</th><th>등급</th><th>상태</th><th>HWID</th><th>실행수</th><th>만료</th><th>관리</th></tr>
-                </thead>
-                <tbody id="keyTableBody"></tbody>
-            </table>
-        </div>
-    </div>
+<div id="adminPanel" style="display:none;">
+    <h1>관리자 패널</h1>
+    <p>성공적으로 로그인되었습니다!</p>
+    <button class="btn-primary" onclick="location.reload()">로그아웃</button>
+</div>
 
 <script>
-    let scriptsData = [];
+    let isSignup = false;
 
-    function login() {
-        const username = document.getElementById('adminUser').value;
-        const password = document.getElementById('adminPass').value;
-        fetch('/api/admin/login', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({username, password})
-        })
-        .then(res => res.json())
-        .then(data => {
-            if(data.success) {
-                document.getElementById('loginSection').classList.add('hidden');
-                document.getElementById('dashSection').classList.remove('hidden');
-                loadData();
-            } else {
-                document.getElementById('loginMsg').innerText = data.message;
-            }
-        });
-    }
-
-    function toggleDurationInput() {
-        const type = document.getElementById('genDurationType').value;
-        document.getElementById('amountWrapper').style.display = (type === 'Lifetime') ? 'none' : 'block';
-    }
-
-    function loadData() {
-        fetch('/api/admin/scripts')
-        .then(res => res.json())
-        .then(scripts => {
-            scriptsData = scripts;
-            const tbody = document.getElementById('scriptTableBody');
-            const select = document.getElementById('genScriptSelect');
-            tbody.innerHTML = ''; select.innerHTML = '';
-            scripts.forEach(s => {
-                tbody.innerHTML += `<tr>
-                    <td>${s.name}</td>
-                    <td>${s.description || '-'}</td>
-                    <td>${s.active ? '활성화' : '꺼짐'}</td>
-                    <td>
-                        <button class="btn-warning" onclick="editScriptPrompt('${s.name}')">수정</button>
-                        <button class="btn-warning" onclick="toggleScript(${s.id})">${s.active ? '끄기' : '켜기'}</button>
-                        <button class="btn-del" onclick="deleteScript(${s.id})">삭제</button>
-                    </td>
-                </tr>`;
-                select.innerHTML += `<option value="${s.name}">${s.name}</option>`;
-            });
-        });
-
-        fetch('/api/admin/keys')
-        .then(res => res.json())
-        .then(keys => {
-            const tbody = document.getElementById('keyTableBody');
-            tbody.innerHTML = '';
-            keys.forEach(k => {
-                tbody.innerHTML += `<tr>
-                    <td><code>${k.key}</code></td>
-                    <td>${k.tier}</td>
-                    <td>${k.status}</td>
-                    <td>${k.hwid}</td>
-                    <td>${k.execs}</td>
-                    <td>${k.expiry}</td>
-                    <td><button class="btn-del" onclick="deleteKey(${k.id})">키 삭제</button></td>
-                </tr>`;
-            });
-        });
-
-        fetch('/api/admin/settings/get')
-        .then(res => res.json())
-        .then(set => {
-            document.getElementById('settingWebhook').value = set.webhook_url || '';
-            const killBtn = document.getElementById('killSwitchBtn');
-            if(set.kill_switch === 'true') {
-                killBtn.innerText = "🚨 킬스위치 작동중 (해제하려면 클릭)";
-                killBtn.style.background = "#ff0000";
-            } else {
-                killBtn.innerText = "🚨 킬스위치 OFF";
-                killBtn.style.background = "#444";
-            }
-        });
-    }
-
-    function editScriptPrompt(name) {
-        const target = scriptsData.find(s => s.name === name);
-        if(target) {
-            document.getElementById('scriptName').value = target.name;
-            document.getElementById('scriptDesc').value = target.description || '';
-            document.getElementById('scriptCode').value = target.lua_code || '';
-            window.scrollTo({top: 0, behavior: 'smooth'});
+    function toggleAdminMode() {
+        isSignup = !isSignup;
+        if (isSignup) {
+            document.getElementById('formTitle').innerText = "Admin Signup";
+            document.getElementById('authBtn').innerText = "Register";
+            document.getElementById('authBtn').className = "btn-success";
+            document.getElementById('toggleLink').innerHTML = "이미 계정이 있으신가요? <span>로그인하기</span>";
+        } else {
+            document.getElementById('formTitle').innerText = "Admin Login";
+            document.getElementById('authBtn').innerText = "Login";
+            document.getElementById('authBtn').className = "btn-primary";
+            document.getElementById('toggleLink').innerHTML = "계정이 없나요? <span>관리자 회원가입하기</span>";
         }
     }
 
-    function saveScript() {
-        const name = document.getElementById('scriptName').value;
-        const description = document.getElementById('scriptDesc').value;
-        const lua_code = document.getElementById('scriptCode').value;
-        fetch('/api/admin/scripts/add', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({name, description, lua_code})
-        }).then(res => res.json()).then(data => {
-            if(data.success) { alert('저장되었습니다.'); loadData(); }
-            else { alert(data.message); }
-        });
-    }
+    async function handleAdminAuth() {
+        let username = document.getElementById('adminUser').value.trim();
+        let password = document.getElementById('adminPass').value.trim();
+        if (!username || !password) {
+            alert("아이디와 비밀번호를 입력해주세요.");
+            return;
+        }
 
-    function deleteScript(id) {
-        if(!confirm('정말 삭제하시겠습니까?')) return;
-        fetch('/api/admin/scripts/delete', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({id})
-        }).then(() => loadData());
-    }
+        let endpoint = isSignup ? '/api/user/signup' : '/api/admin/login';
 
-    function deleteKey(id) {
-        if(!confirm('정말 이 키를 삭제하시겠습니까?')) return;
-        fetch('/api/admin/keys/delete', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({id})
-        }).then(() => loadData());
-    }
+        try {
+            let res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: username, password: password })
+            });
+            let data = await res.json();
 
-    function toggleScript(id) {
-        fetch('/api/admin/scripts/toggle', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({id})
-        }).then(() => loadData());
-    }
-
-    function generateKey() {
-        const script_name = document.getElementById('genScriptSelect').value;
-        const duration_type = document.getElementById('genDurationType').value;
-        const amount = parseInt(document.getElementById('genAmount').value) || 24;
-
-        fetch('/api/admin/generate', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({script_name, duration_type, amount})
-        }).then(res => res.json()).then(data => {
-            if(data.success) {
-                document.getElementById('genResult').innerText = "발급된 키: " + data.key;
-                loadData();
-            } else { alert('발급 실패'); }
-        });
-    }
-
-    function toggleKillSwitch() {
-        fetch('/api/admin/toggle_kill', {method: 'POST'}).then(() => loadData());
-    }
-
-    function saveSettings() {
-        const webhook_url = document.getElementById('settingWebhook').value;
-        fetch('/api/admin/settings', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({webhook_url})
-        }).then(() => alert('저장되었습니다.'));
+            if (data.success) {
+                if (isSignup) {
+                    alert("관리자 회원가입 완료! 로그인해주세요.");
+                    toggleAdminMode();
+                } else {
+                    alert("로그인 성공!");
+                    document.getElementById('loginSection').style.display = 'none';
+                    document.getElementById('adminPanel').style.display = 'block';
+                }
+            } else {
+                alert(data.message || "로그인 실패");
+            }
+        } catch (e) {
+            alert("통신 오류 발생");
+        }
     }
 </script>
+
 </body>
 </html>
