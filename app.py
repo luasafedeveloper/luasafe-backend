@@ -96,7 +96,7 @@ pcall(function()
     {script.lua_code}
 end)"""
 
-# --- 개발자 회원가입 (라이센스 코드 필수) ---
+# --- 개발자 회원가입 및 인증 API ---
 @app.route('/api/admin/register', methods=['POST'])
 def dev_register():
     data = request.get_json() or {}
@@ -146,14 +146,14 @@ def dev_logout():
     session.clear()
     return jsonify({'success': True})
 
-# --- 비밀 관리자 페이지 전용 로그인 및 라이센스 관리 API ---
+# --- 라이센스 페이지 로그인 및 발급 API ---
 @app.route('/api/secret/login', methods=['POST'])
 def secret_login():
     data = request.get_json() or {}
     if data.get('username') == 'solar' and data.get('password') == '$kyle0924':
         session['master_logged_in'] = True
         return jsonify({'success': True})
-    return jsonify({'success': False, 'message': '정보가 일치하지 않습니다.'}), 401
+    return jsonify({'success': False, 'message': '아이디 또는 비밀번호가 틀렸습니다.'}), 401
 
 @app.route('/api/secret/check_session')
 def secret_check_session():
@@ -260,6 +260,20 @@ def admin_delete_key():
         return jsonify({'success': True})
     return jsonify({'success': False}), 403
 
+# --- 개발자 전용 HWID 초기화 API ---
+@app.route("/api/admin/keys/reset_hwid", methods=["POST"])
+@login_required
+def admin_reset_hwid():
+    user_id = session.get('user_id')
+    data = request.get_json() or {}
+    key_obj = Key.query.filter_by(id=data.get('id'), owner_id=user_id).first()
+    if not key_obj:
+        return jsonify({'success': False, 'message': '키를 찾을 수 없거나 권한이 없습니다.'}), 403
+
+    key_obj.hwid = "UNBOUND"
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'HWID가 초기화되었습니다.'})
+
 @app.route("/api/admin/generate", methods=["POST"])
 @login_required
 def admin_generate():
@@ -283,6 +297,7 @@ def admin_generate():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
+# --- 일반 유저용 키 조회 API (HWID 초기화 기능 제거됨) ---
 @app.route("/api/user/lookup", methods=["POST"])
 def user_lookup_key():
     data = request.json or {}
@@ -305,23 +320,6 @@ def user_lookup_key():
         "execs": key_obj.exec_count,
         "script_name": key_obj.script_name
     })
-
-@app.route("/api/user/reset_hwid", methods=["POST"])
-def user_reset_hwid():
-    data = request.json or {}
-    key_str = data.get("key", "").strip()
-    
-    key_obj = Key.query.filter_by(key=key_str).first()
-    if not key_obj:
-        return jsonify({"success": False, "message": "키를 찾을 수 없습니다."}), 404
-        
-    if key_obj.last_hwid_reset and datetime.utcnow() < key_obj.last_hwid_reset + timedelta(days=3):
-        return jsonify({"success": False, "message": "HWID 초기화 쿨타임 중입니다. (3일)"}), 400
-
-    key_obj.hwid = "UNBOUND"
-    key_obj.last_hwid_reset = datetime.utcnow()
-    db.session.commit()
-    return jsonify({'success': True, 'message': 'HWID 초기화 완료!'})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
