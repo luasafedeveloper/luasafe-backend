@@ -3,65 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Luasafe - Key & Loader Hub</title>
+    <title>Luasafe Loader Hub</title>
     <style>
         body { background-color: #0f0f12; color: #e1e1e6; font-family: sans-serif; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-        .container { width: 100%; max-width: 450px; background: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 25px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
-        h2 { text-align: center; margin-bottom: 20px; }
-        .section { margin-bottom: 20px; }
-        label { display: block; font-size: 13px; color: #a1a1aa; margin-bottom: 6px; }
-        input { width: 100%; padding: 12px; background: #27272a; border: 1px solid #3f3f46; border-radius: 8px; color: #fff; box-sizing: border-box; margin-bottom: 10px; }
-        button { width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        .btn-primary { background: #6366f1; color: white; }
-        .btn-warning { background: #f59e0b; color: #000; margin-top: 10px; }
-        pre { background: #09090b; border: 1px solid #27272a; padding: 12px; border-radius: 8px; color: #10b981; font-size: 12px; overflow-x: auto; max-height: 150px; }
-        .info-box { background: #1f1f23; border-radius: 8px; padding: 12px; font-size: 13px; margin-top: 15px; border: 1px solid #27272a; }
-        .info-box div { margin-bottom: 6px; }
-        .portal-link { text-align: center; margin-top: 15px; font-size: 13px; }
-        .portal-link a { color: #818cf8; text-decoration: none; }
+        .container { width: 100%; max-width: 450px; }
+        .card { background: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 25px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+        h2 { text-align: center; margin-top: 0; }
+        input { width: 100%; padding: 12px; margin: 8px 0; background: #27272a; border: 1px solid #3f3f46; border-radius: 6px; color: #fff; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; }
+        .btn-primary { background: #6366f1; color: white; margin-top: 10px; }
+        .btn-success { background: #10b981; color: white; margin-top: 10px; }
+        .info-box { background: #27272a; padding: 12px; border-radius: 6px; margin-top: 15px; font-size: 14px; display: none; }
+        .footer-link { text-align: center; margin-top: 15px; font-size: 13px; }
+        .footer-link a { color: #818cf8; text-decoration: none; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>Luasafe Loader Hub</h2>
-
-    <!-- 키 입력 영역 -->
-    <div class="section">
+    <div class="card">
+        <h2>Luasafe Loader Hub</h2>
         <label>발급받은 키 입력</label>
         <input type="text" id="keyInput" placeholder="luasafe-XXXX-XXXX-XXXX">
         <button class="btn-primary" onclick="lookupKey()">로더 코드 발급받기</button>
-    </div>
 
-    <!-- 생성된 로더 코드 출력 영역 -->
-    <div class="section" id="loaderSection" style="display:none;">
-        <label>복사해서 게임에 실행할 로더 코드</label>
-        <pre id="loaderOutput"></pre>
-        <button class="btn-primary" onclick="copyLoader()">로더 코드 복사하기</button>
-    </div>
+        <div id="resultBox" class="info-box">
+            <p style="margin: 0 0 8px 0; color: #a1a1aa; font-size: 12px;">복사해서 게임에 실행할 로더 코드:</p>
+            <input type="text" id="loaderCodeOutput" readonly style="background: #18181b; font-size: 12px; color: #10b981; cursor: pointer;" onclick="copyLoaderCode()">
+            <button class="btn-success" onclick="copyLoaderCode()">로더 코드 복사하기</button>
+            <hr style="border: 0; border-top: 1px solid #3f3f46; margin: 12px 0;">
+            <p id="statusText" style="margin: 4px 0;"></p>
+            <p id="scriptText" style="margin: 4px 0;"></p>
+            <p id="expiryText" style="margin: 4px 0;"></p>
+            <p id="hwidText" style="margin: 4px 0;"></p>
+        </div>
 
-    <!-- 키 상세 정보 -->
-    <div class="info-box" id="infoBox" style="display:none;">
-        <div><strong>상태:</strong> <span id="statusText">-</span></div>
-        <div><strong>연동 스크립트:</strong> <span id="scriptText" style="color:#818cf8;">-</span></div>
-        <div><strong>만료 시간:</strong> <span id="expiryText">-</span></div>
-        <div><strong>등록된 HWID:</strong> <span id="hwidText">-</span></div>
-        
-        <button class="btn-warning" onclick="resetHwid()">HWID 초기화 (3일 쿨타임)</button>
-    </div>
-
-    <div class="portal-link">
-        <a href="/admin" target="_blank">👉 개발자 포털 (스크립트/키 관리) 가기</a>
+        <div class="footer-link">
+            <a href="/admin">👉 개발자 포털 (스크립트/키 관리) 가기</a>
+        </div>
     </div>
 </div>
 
 <script>
-    let currentKey = "";
-
     async function lookupKey() {
         let key = document.getElementById('keyInput').value.trim();
         if (!key) return alert("키를 입력해주세요.");
-        currentKey = key;
 
         let res = await fetch('/api/user/lookup', {
             method: 'POST',
@@ -71,35 +57,26 @@
         let data = await res.json();
 
         if (data.success) {
-            document.getElementById('statusText').innerText = data.status;
-            document.getElementById('scriptText').innerText = data.script_name || '전체 허브';
-            document.getElementById('expiryText').innerText = data.expiry;
-            document.getElementById('hwidText').innerText = data.hwid;
-            document.getElementById('infoBox').style.display = 'block';
+            document.getElementById('resultBox').style.display = 'block';
+            let loaderPayload = `scriptkey = "${data.key}"\nloadstring(game:HttpGet("https://luasafe-backend.onrender.com/loader.lua"))()`;
+            document.getElementById('loaderCodeOutput').value = loaderPayload;
 
-            let cleanLoader = `scriptkey = "${data.key}"\n\nloadstring(game:HttpGet("https://luasafe-backend.onrender.com/loader.lua"))()`;
-            document.getElementById('loaderOutput').innerText = cleanLoader;
-            document.getElementById('loaderSection').style.display = 'block';
+            document.getElementById('statusText').innerHTML = `<b>상태:</b> <span style="color: #10b981;">${data.status}</span>`;
+            document.getElementById('scriptText').innerHTML = `<b>연동 스크립트:</b> ${data.script_name || '-'}`;
+            document.getElementById('expiryText').innerHTML = `<b>만료 시간:</b> ${data.expiry}`;
+            document.getElementById('hwidText').innerHTML = `<b>등록된 HWID:</b> ${data.hwid}`;
         } else {
             alert(data.message);
+            document.getElementById('resultBox').style.display = 'none';
         }
     }
 
-    async function resetHwid() {
-        if (!confirm("HWID를 초기화하시겠습니까? (3일 쿨타임)")) return;
-        let res = await fetch('/api/user/reset_hwid', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: json = JSON.stringify({key: currentKey})
-        });
-        let data = await res.json();
-        alert(data.message);
-        if (data.success) lookupKey();
-    }
-
-    function copyLoader() {
-        let code = document.getElementById('loaderOutput').innerText;
-        navigator.clipboard.writeText(code).then(() => alert("로더 코드가 복사되었습니다!"));
+    function copyLoaderCode() {
+        let copyText = document.getElementById('loaderCodeOutput');
+        copyText.select();
+        copyText.setSelectionRange(0, 99999);
+        navigator.clipboard.writeText(copyText.value);
+        alert("로더 코드가 복사되었습니다!");
     }
 </script>
 
