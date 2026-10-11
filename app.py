@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 import functools
 import random
 import string
-from config import Config  # 👈 누락되었던 Config 임포트 추가
+from config import Config
 from flask import Flask, jsonify, render_template, request, session
 from models import Blacklist, InviteCode, Key, Script, Setting, User, db
 import requests
@@ -28,7 +28,7 @@ def login_required(f):
   return decorated_function
 
 
-# --- URL 라우터 ---
+# --- URL 라우터 (프론트엔드 렌더링 분기 수정) ---
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def domain_router(path):
@@ -37,6 +37,7 @@ def domain_router(path):
 
   if path == 'admin' or path.startswith('admin/'):
     if not path.startswith('api/'):
+      # 로그인이 안 되어 있으면 자동으로 로그인/회원가입 화면을 띄우거나 세션 체크 유도
       return render_template('admin/index.html')
 
   if not path.startswith('api/'):
@@ -224,6 +225,7 @@ def dev_check_session():
 
 @app.route('/api/admin/logout', methods=['POST'])
 def dev_logout():
+  # 🔒 세션 데이터 완전 초기화 (로그아웃 처리 보완)
   session.clear()
   return jsonify({'success': True})
 
@@ -232,7 +234,7 @@ def dev_logout():
 @app.route('/api/secret/login', methods=['POST'])
 def secret_login():
   data = request.get_json() or {}
-  if data.get('username') == 'solar' and data.get('password') == '$kyle0924':
+  if data.get('username'] == 'solar' and data.get('password'] == '$kyle0924':
     session['master_logged_in'] = True
     return jsonify({'success': True})
   return jsonify({'success': False, 'message': '아이디 또는 비밀번호가 틀렸습니다.'}), 401
