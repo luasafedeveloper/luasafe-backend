@@ -44,10 +44,10 @@ def domain_router(path):
   return render_template('user/index.html')
 
 
-# --- 순정 로더 엔드포인트 (GET 파라미터 방식 지원) ---
+# --- [Maximum Security] HWID 바인딩 + XOR 파편화 + 안티덤프 적용 로더 ---
 @app.route('/loader.lua', methods=['GET', 'POST'])
 def loader():
-  # URL 파라미터나 폼/JSON에서 키 추출
+  # URL 파라미터나 폼/JSON에서 키와 HWID 추출
   key_str = request.args.get('key', '').strip()
   client_hwid = request.args.get('hwid', '').strip()
 
@@ -63,11 +63,12 @@ def loader():
   if not key_obj or not key_obj.is_valid():
     return 'warn("[Luasafe] Invalid or expired key.");'
 
+  # 🔒 HWID 바인딩 로직
   if key_obj.hwid == 'UNBOUND' or not key_obj.hwid:
     if client_hwid:
       key_obj.hwid = client_hwid
   elif client_hwid and key_obj.hwid != client_hwid:
-    pass
+    return 'warn("[Luasafe Security] HWID Mismatch! Access Denied.");'
 
   key_obj.exec_count += 1
   db.session.commit()
@@ -82,8 +83,40 @@ def loader():
   if not script:
     return 'warn("[Luasafe] No active script available!");'
 
-  # 원본 순정 스크립트 그대로 반환 (정상 실행)
-  return script.lua_code
+  # 💡 덤프 방어를 위한 스크립트 XOR 난독화 처리
+  raw_lua = script.lua_code
+  dynamic_xor = random.randint(10, 200)
+  obfuscated_bytes = [ord(c) ^ dynamic_xor for c in raw_lua]
+  payload_str = ','.join(map(str, obfuscated_bytes))
+
+  # 🛡️ 메모리 덤퍼 및 분석 툴 탐지 스텁 + 동적 복호화 실행 엔진 리턴
+  lua_payload = """local _ENV = (getgenv or getrenv or getfenv)()
+pcall(function()
+    local blocked_tools = {'OLDump', 'dump', 'DumpString', 'getgc', 'getconstants', 'getprotos', 'setreadonly', 'hookfunction'}
+    for _, tool in ipairs(blocked_tools) do
+        if _ENV[tool] and type(_ENV[tool]) == "function" then
+            warn("[Luasafe Security] Note: Unauthorized Hook/Dump Tool Detected -> " .. tool)
+        end
+    end
+
+    local encrypted_bytes = {%s}
+    local xor_key = %d
+    local decoded_chars = {}
+    
+    for i = 1, #encrypted_bytes do
+        decoded_chars[i] = string.char(encrypted_bytes[i] ~ xor_key)
+    end
+    
+    local executable_payload = table.concat(decoded_chars)
+    local runner, err = loadstring(executable_payload)
+    if runner then
+        task.spawn(runner)
+    else
+        warn("[Luasafe] Core Decryption Failed: ", tostring(err))
+    end
+end)""" % (payload_str, dynamic_xor)
+
+  return lua_payload
 
 
 # --- 개발자 회원가입 및 인증 API ---
