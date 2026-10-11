@@ -37,36 +37,20 @@ def domain_router(path):
         return render_template("user/index.html")
     return render_template("user/index.html")
 
-# --- 스마트 로더 ---
+# --- 강력한 보안이 적용된 스마트 로더 ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
+    # 1. 브라우저나 일반 외부 툴(GET 요청)로 소스코드를 훔쳐보려는 시도 원천 차단
     if request.method == 'GET':
-        lua_payload = '''local s, r = pcall(function()
-    return request({
-        Url = "https://luasafe-backend.onrender.com/loader.lua",
-        Method = "POST",
-        Headers = { ["Content-Type"] = "application/json" },
-        Body = game:GetService("HttpService"):JSONEncode({
-            key = scriptkey,
-            hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())
-        })
-    })
-end);
-
-if s and r and r.StatusCode == 200 then
-    local f, err = loadstring(r.Body);
-    if f then f(); else warn("[Luasafe Error] " .. tostring(err)); end
-else
-    game:GetService("Players").LocalPlayer:Kick("[Luasafe] Auth Failed or Connection Error.");
-end;'''
-        return lua_payload
+        return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe Security] Direct access not allowed.");'
 
     data = request.get_json(silent=True) or request.form or {}
     key_str = str(data.get('key', '')).strip()
     client_hwid = str(data.get('hwid', '')).strip()
 
-    if not client_hwid or client_hwid.lower() == "unknown":
-        return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Security Error: Invalid HWID.");'
+    # 2. 유효하지 않거나 빈 HWID 차단
+    if not client_hwid or client_hwid.lower() == "unknown" or len(client_hwid) < 5:
+        return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe Security] Invalid Hardware ID.");'
 
     if not key_str:
         return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Error: Key is missing.");'
@@ -75,6 +59,7 @@ end;'''
     if not key_obj or not key_obj.is_valid():
         return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Invalid or expired key!");'
     
+    # 3. HWID 바인딩 검증 (다른 사람이 가짜 HWID로 뚫지 못하도록 고정)
     if key_obj.hwid == "UNBOUND" or not key_obj.hwid:
         key_obj.hwid = client_hwid
     elif key_obj.hwid != client_hwid:
@@ -91,6 +76,7 @@ end;'''
     if not script:
         return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] No active script available!");'
     
+    # 4. 안전하게 압축 및 감싸서 실행
     return f"""-- [Luasafe Secure Execution]
 pcall(function()
     {script.lua_code}
@@ -260,7 +246,6 @@ def admin_delete_key():
         return jsonify({'success': True})
     return jsonify({'success': False}), 403
 
-# --- 개발자 전용 HWID 초기화 API ---
 @app.route("/api/admin/keys/reset_hwid", methods=["POST"])
 @login_required
 def admin_reset_hwid():
@@ -297,7 +282,6 @@ def admin_generate():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
-# --- 일반 유저용 키 조회 API (HWID 초기화 기능 제거됨) ---
 @app.route("/api/user/lookup", methods=["POST"])
 def user_lookup_key():
     data = request.json or {}
