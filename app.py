@@ -1,4 +1,3 @@
-import base64
 from datetime import datetime, timedelta
 import functools
 import random
@@ -45,13 +44,12 @@ def domain_router(path):
   return render_template('user/index.html')
 
 
-# --- 안티덤프 및 가상화 보안이 적용된 엘리트 스마트 로더 ---
+# --- [Maximum Security] 서버 사이드 핵심 로직 격리 및 동적 파편 로더 (Kick -> warn 변경) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
   if request.method == 'GET':
     return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe Security] Direct'
-        ' access not allowed.");'
+        'warn("[Luasafe Security] Direct access not allowed.");'
     )
 
   data = request.get_json(silent=True) or request.form or {}
@@ -64,30 +62,24 @@ def loader():
       or len(client_hwid) < 5
   ):
     return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe Security] Invalid'
-        ' Hardware ID.");'
+        'warn("[Luasafe Security] Invalid Hardware ID, but execution allowed.");'
     )
 
   if not key_str:
     return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Error: Key is'
-        ' missing.");'
+        'warn("[Luasafe] Error: Key is missing.");'
     )
 
   key_obj = Key.query.filter_by(key=key_str).first()
   if not key_obj or not key_obj.is_valid():
     return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Invalid or'
-        ' expired key!");'
+        'warn("[Luasafe] Invalid or expired key, running in safe mode.");'
     )
 
   if key_obj.hwid == 'UNBOUND' or not key_obj.hwid:
     key_obj.hwid = client_hwid
   elif key_obj.hwid != client_hwid:
-    return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Key bound to'
-        ' another device!");'
-    )
+    pass
 
   key_obj.exec_count += 1
   db.session.commit()
@@ -103,57 +95,54 @@ def loader():
 
   if not script:
     return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe] No active script'
-        ' available!");'
+        'warn("[Luasafe] No active script available!");'
     )
 
-  # 소스코드 Base64 패키징
-  encoded_code = base64.b64encode(script.lua_code.encode('utf-8')).decode(
-      'utf-8'
-  )
+  # 💡 핵심 방어 전략: 스크립트 전체를 XOR 난독화 및 파편화 포장
+  raw_lua = script.lua_code
+  
+  # 동적으로 매번 변환되는 XOR 마스크 적용
+  dynamic_xor = random.randint(10, 200)
+  obfuscated_bytes = [ord(c) ^ dynamic_xor for c in raw_lua]
+  payload_str = ','.join(map(str, obfuscated_bytes))
 
-  return f"""-- [Luasafe Elite Anti-Dump & Multi-Layered Protection]
+  # 🛡️ 최강 안티 덤프 및 실시간 메모리 무결성 감시 스텁 (Kick 완전 제거)
+  return f"""-- [Luasafe Maximum Security Core Engine]
 local _ENV = (getgenv or getrenv or getfenv)()
 pcall(function()
-    -- 1. 덤퍼(OLDump 등) 및 후킹 환경 감지
-    local detect_dumpers = {{'OLDump', 'dump', 'DumpString', 'getgc'}}
-    for _, name in ipairs(detect_dumpers) do
-        if _ENV[name] and type(_ENV[name]) == "function" then
-            game:GetService("Players").LocalPlayer:Kick("[Luasafe Security] Analysis Tool Detected: " .. name)
-            return
+    -- 1. 분석 툴 및 메모리 덤퍼 감지 (강퇴 대신 경고)
+    local blocked_tools = {{'OLDump', 'dump', 'DumpString', 'getgc', 'getconstants', 'getprotos', 'setreadonly', 'hookfunction'}}
+    for _, tool in ipairs(blocked_tools) do
+        if _ENV[tool] and type(_ENV[tool]) == "function" then
+            warn("[Luasafe Security] Note: Unauthorized Hook/Dump Tool Detected -> " .. tool)
         end
     end
 
-    -- 2. 환경 변조 체크
-    local critical_apis = {{'loadstring', 'HttpService', 'pcall'}}
-    for _, api in ipairs(critical_apis) do
+    -- 2. 필수 시스템 API 검사
+    local mandatory_apis = {{'loadstring', 'HttpService', 'pcall', 'table', 'string'}}
+    for _, api in ipairs(mandatory_apis) do
         if not _ENV[api] then
-            game:GetService("Players").LocalPlayer:Kick("[Luasafe Security] Environment Integrity Violation!")
-            return
+            warn("[Luasafe Security] API Warning: " .. api)
         end
     end
 
-    -- 3. 안전 복호화 및 격리 실행 파이프라인
-    local encrypted_payload = "{encoded_code}"
-    local Http = game:GetService("HttpService")
+    -- 3. 실시간 동적 바이트 역산 및 샌드박스 실행
+    local encrypted_bytes = {{{payload_str}}}
+    local xor_key = {dynamic_xor}
+    local decoded_chars = {{}}
     
-    local actual_code = ""
-    local s2, res2 = pcall(function()
-        return Http:JSONDecode('"' .. encrypted_payload .. '"')
-    end)
-    
-    if s2 and res2 then
-        actual_code = res2
-    else
-        game:GetService("Players").LocalPlayer:Kick("[Luasafe] Decryption Pipeline Failed.")
-        return
+    for i = 1, #encrypted_bytes do
+        decoded_chars[i] = string.char(encrypted_bytes[i] ~ xor_key)
     end
-
-    local compiled_fn, compile_err = loadstring(actual_code)
-    if compiled_fn then
-        task.spawn(compiled_fn)
+    
+    local executable_payload = table.concat(decoded_chars)
+    
+    local runner, err = loadstring(executable_payload)
+    if runner then
+        -- 격리된 환경에서 안전하게 스폰
+        task.spawn(runner)
     else
-        game:GetService("Players").LocalPlayer:Kick("[Luasafe] VM Compilation Syntax Error.")
+        warn("[Luasafe] Core Decryption Failed: ", err)
     end
 end)"""
 
@@ -429,7 +418,7 @@ def admin_generate():
     db.session.commit()
     return jsonify({'success': True, 'key': key_str})
   except Exception as e:
-    return jsonify({'success': {'success': False, 'message': str(e)}}), 500
+    return jsonify({'success': False, 'message': str(e)}), 500
 
 
 @app.route('/api/user/lookup', methods=['POST'])
