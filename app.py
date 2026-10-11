@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import functools
 import random
 import string
+from config import Config  # 👈 누락되었던 Config 임포트 추가
 from flask import Flask, jsonify, render_template, request, session
 from models import Blacklist, InviteCode, Key, Script, Setting, User, db
 import requests
@@ -130,16 +131,14 @@ end;"""
   raw_lua = script.lua_code
   byte_list = [ord(c) for c in raw_lua]
 
-  # 인덱스 셔플 매핑 생성
   indices = list(range(len(byte_list)))
-  random.seed(len(raw_lua) * 13)  # 시드 고정으로 복호화 대칭성 유지
+  random.seed(len(raw_lua) * 13)
   random.shuffle(indices)
 
   shuffled_bytes = [0] * len(byte_list)
   for original_idx, shuffled_idx in enumerate(indices):
     shuffled_bytes[shuffled_idx] = (byte_list[original_idx] + 77) % 256
 
-  # 역방향 인덱스 배열 생성 (클라이언트가 원래 순서로 복구할 수 있도록 함)
   inverse_indices = [0] * len(byte_list)
   for original_idx, shuffled_idx in enumerate(indices):
     inverse_indices[shuffled_idx] = original_idx
@@ -147,7 +146,6 @@ end;"""
   payload_str = ','.join(map(str, shuffled_bytes))
   index_str = ','.join(map(str, inverse_indices))
 
-  # 전문가도 분석을 포기하게 만드는 가상 상태 기계(State Machine) 기반 복호화 래퍼
   anti_dump_wrapper = (
       """local _ENV = (getgenv or getrenv or getfenv)()
 pcall(function()
