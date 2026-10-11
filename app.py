@@ -44,12 +44,18 @@ def domain_router(path):
   return render_template('user/index.html')
 
 
-# --- 스마트 로더 (GET: 껍데기 전달 / POST: HWID 검증 및 XOR 난독화 스크립트 리턴) ---
+# --- 스마트 로더 (모바일 실행기 호환 request fallback 적용) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
   if request.method == 'GET':
-    lua_payload = '''local s, r = pcall(function()
-    return request({
+    lua_payload = '''local req = (request or http_request or (syn and syn.request) or (fluxus and fluxus.request));
+if not req then
+    game:GetService("Players").LocalPlayer:Kick("[Luasafe] Error: Executor does not support HTTP requests.");
+    return;
+end;
+
+local s, r = pcall(function()
+    return req({
         Url = "https://luasafe-backend.onrender.com/loader.lua",
         Method = "POST",
         Headers = { ["Content-Type"] = "application/json" },
@@ -60,9 +66,14 @@ def loader():
     })
 end);
 
-if s and r and r.StatusCode == 200 then
-    local f, err = loadstring(r.Body);
-    if f then f(); else warn("[Luasafe Error] " .. tostring(err)); end
+if s and r and (r.StatusCode == 200 or r.Success) then
+    local body = r.Body or r.çi or "";
+    local f, err = loadstring(body);
+    if f then 
+        task.spawn(f); 
+    else 
+        warn("[Luasafe Decryption Error] " .. tostring(err)); 
+    end
 else
     game:GetService("Players").LocalPlayer:Kick("[Luasafe] Auth Failed or Connection Error.");
 end;'''
@@ -91,7 +102,7 @@ end;'''
         ' expired key!");'
     )
 
-  # 🔒 HWID 바인딩 검증 및 등록
+  # HWID 바인딩 로직
   if key_obj.hwid == 'UNBOUND' or not key_obj.hwid:
     key_obj.hwid = client_hwid
   elif key_obj.hwid != client_hwid:
@@ -116,43 +127,7 @@ end;'''
         ' script available!");'
     )
 
-  # 💡 [핵심 보안] 덤퍼 방어를 위한 스크립트 XOR 동적 난독화 처리
-  raw_lua = script.lua_code
-  dynamic_xor = random.randint(10, 200)
-  obfuscated_bytes = [ord(c) ^ dynamic_xor for c in raw_lua]
-  payload_str = ','.join(map(str, obfuscated_bytes))
-
-  # 🛡️ 메모리 덤퍼 탐지 스텁 + 동적 복호화 및 안전 실행 엔진
-  secure_lua_payload = (
-      """local _ENV = (getgenv or getrenv or getfenv)()
-pcall(function()
-    local blocked_tools = {'OLDump', 'dump', 'DumpString', 'getgc', 'getconstants', 'getprotos', 'setreadonly', 'hookfunction'}
-    for _, tool in ipairs(blocked_tools) do
-        if _ENV[tool] and type(_ENV[tool]) == "function" then
-            warn("[Luasafe Security] Note: Unauthorized Hook/Dump Tool Detected -> " .. tool)
-        end
-    end
-
-    local encrypted_bytes = {%s}
-    local xor_key = %d
-    local decoded_chars = {}
-    
-    for i = 1, #encrypted_bytes do
-        decoded_chars[i] = string.char(encrypted_bytes[i] ~ xor_key)
-    end
-    
-    local executable_payload = table.concat(decoded_chars)
-    local runner, err = loadstring(executable_payload)
-    if runner then
-        task.spawn(runner)
-    else
-        warn("[Luasafe] Core Decryption Failed: ", tostring(err))
-    end
-end)"""
-      % (payload_str, dynamic_xor)
-  )
-
-  return secure_lua_payload
+  return script.lua_code
 
 
 # --- 개발자 회원가입 및 인증 API ---
@@ -255,15 +230,41 @@ def secret_list_invites():
   return jsonify([{'code': i.code, 'used': i.used} for i in invites])
 
 
-# --- 개발자 대시보드 API ---
+# --- 개발자 대시보드 API (파일 업로드 지원 추가) ---
 @app.route('/api/admin/scripts/add', methods=['POST'])
 @login_required
 def add_script_api():
   user_id = session.get('user_id')
-  data = request.get_json() or {}
-  name = data.get('name', '').strip()
-  description = data.get('description', '').strip()
-  lua_code = data.get('lua_code', '')
+  lua_code = ''
+
+  # 파일 업로드로 들어온 경우(.lua 파일 등)
+  if 'script_file' in request.files:
+    file = request.files['script_file']
+    if file and file.filename != '':
+      try:
+        lua_code = file.read().decode('utf-8')
+      except Exception as e:
+        return (
+            jsonify({
+                'success': False,
+                'message': '파일 읽기 오류 (UTF-8 필요): ' + str(e),
+            }),
+            400,
+        )
+
+  # 파일이 없으면 기존 폼 데이터에서 가져오기
+  if not lua_code:
+    lua_code = request.form.get('lua_code', '') or (
+        request.get_json(silent=True) or {}
+    ).get('lua_code', '')
+
+  name = request.form.get('name') or (
+      request.get_json(silent=True) or {}
+  ).get('name', '')
+  description = request.form.get('description') or (
+      request.get_json(silent=True) or {}
+  ).get('description', '')
+  name = name.strip()
 
   if not name:
     return jsonify({'success': False, 'message': '스크립트 이름을 입력하세요.'}), 400
@@ -271,7 +272,8 @@ def add_script_api():
   script = Script.query.filter_by(owner_id=user_id, name=name).first()
   if script:
     script.description = description
-    script.lua_code = lua_code
+    if lua_code:
+      script.lua_code = lua_code
   else:
     script = Script(
         owner_id=user_id,
@@ -355,7 +357,6 @@ def admin_delete_key():
   return jsonify({'success': False}), 403
 
 
-# --- 개발자 전용 HWID 초기화 API ---
 @app.route('/api/admin/keys/reset_hwid', methods=['POST'])
 @login_required
 def admin_reset_hwid():
@@ -409,7 +410,6 @@ def admin_generate():
     return jsonify({'success': False, 'message': str(e)}), 500
 
 
-# --- 일반 유저용 키 조회 API ---
 @app.route('/api/user/lookup', methods=['POST'])
 def user_lookup_key():
   data = request.json or {}
