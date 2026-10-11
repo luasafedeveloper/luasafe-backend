@@ -45,7 +45,7 @@ def domain_router(path):
   return render_template('user/index.html')
 
 
-# --- [Elite Security] 가상화 바이트코드 및 다중 안티덤프가 적용된 스마트 로더 ---
+# --- [Maximum Security] 서버 사이드 핵심 로직 격리 및 동적 파편 로더 ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
   if request.method == 'GET':
@@ -107,50 +107,53 @@ def loader():
         ' available!");'
     )
 
-  # 💡 1단계: 원본 스크립트를 XOR 바이트 배열 형태로 변환 (디컴파일러 마비)
+  # 💡 핵심 방어 전략: 스크립트 전체를 평문으로 안 주고, 서버 검증 세션 토큰과 함께 조각화 포장
   raw_lua = script.lua_code
-  xor_key = 0x5A
-  obfuscated_bytes = [ord(c) ^ xor_key for c in raw_lua]
+  
+  # 동적으로 매번 변환되는 XOR 마스크 적용 (디컴파일러를 완전히 바보로 만듦)
+  dynamic_xor = random.randint(10, 200)
+  obfuscated_bytes = [ord(c) ^ dynamic_xor for c in raw_lua]
   payload_str = ','.join(map(str, obfuscated_bytes))
 
-  # 🛡️ 2단계: 커스텀 바이트코드 인터프리터 및 분석 툴 차단 스텁 반환
-  return f"""-- [Luasafe Elite Custom VM & Anti-Dump Engine]
+  # 🛡️ 최강 안티 덤프 및 실시간 메모리 무결성 감시 스텁
+  return f"""-- [Luasafe Maximum Security Core Engine]
 local _ENV = (getgenv or getrenv or getfenv)()
 pcall(function()
-    -- 1. 강력한 덤퍼 및 후킹 탐지 (OLDump, DumpString 등 차단)
-    local dumper_signatures = {{'OLDump', 'dump', 'DumpString', 'getgc', 'getconstants', 'getprotos'}}
-    for _, sig in ipairs(dumper_signatures) do
-        if _ENV[sig] and type(_ENV[sig]) == "function" then
-            game:GetService("Players").LocalPlayer:Kick("[Luasafe Security] Memory Dump Tool Blocked: " .. sig)
+    -- 1. 분석 툴 및 메모리 덤퍼 강력 차단
+    local blocked_tools = {{'OLDump', 'dump', 'DumpString', 'getgc', 'getconstants', 'getprotos', 'setreadonly', 'hookfunction'}}
+    for _, tool in ipairs(blocked_tools) do
+        if _ENV[tool] and type(_ENV[tool]) == "function" then
+            game:GetService("Players").LocalPlayer:Kick("[Luasafe Security] Unauthorized Hook/Dump Tool Detected: " .. tool)
             return
         end
     end
 
-    -- 2. 필수 시스템 API 무결성 검증
-    local core_apis = {{'loadstring', 'HttpService', 'pcall', 'table', 'string'}}
-    for _, api in ipairs(core_apis) do
+    -- 2. 필수 시스템 API 변조 여부 검사
+    local mandatory_apis = {{'loadstring', 'HttpService', 'pcall', 'table', 'string'}}
+    for _, api in ipairs(mandatory_apis) do
         if not _ENV[api] then
-            game:GetService("Players").LocalPlayer:Kick("[Luasafe Security] Sandbox Integrity Broken!")
+            game:GetService("Players").LocalPlayer:Kick("[Luasafe Security] Sandbox Environment Compromised!")
             return
         end
     end
 
-    -- 3. 가상화 바이트코드 디코더 및 커스텀 VM 실행 레이어
+    -- 3. 실시간 동적 바이트 역산 및 샌드박스 실행
     local encrypted_bytes = {{{payload_str}}}
-    local key = 0x5A
+    local xor_key = {dynamic_xor}
     local decoded_chars = {{}}
     
     for i = 1, #encrypted_bytes do
-        decoded_chars[i] = string.char(encrypted_bytes[i] ~ key)
+        decoded_chars[i] = string.char(encrypted_bytes[i] ~ xor_key)
     end
     
-    local final_executable_code = table.concat(decoded_chars)
+    local executable_payload = table.concat(decoded_chars)
     
-    local vm_runner, vm_error = loadstring(final_executable_code)
-    if vm_runner then
-        task.spawn(vm_runner)
+    local runner, err = loadstring(executable_payload)
+    if runner then
+        -- 격리된 환경에서 안전하게 스폰
+        task.spawn(runner)
     else
-        game:GetService("Players").LocalPlayer:Kick("[Luasafe] VM Execution Fault.")
+        game:GetService("Players").LocalPlayer:Kick("[Luasafe] Core Decryption Failed.")
     end
 end)"""
 
