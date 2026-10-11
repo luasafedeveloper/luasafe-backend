@@ -10,7 +10,7 @@
         .card { background: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 25px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
         h2 { text-align: center; margin-top: 0; }
         input, textarea { width: 100%; padding: 12px; margin: 8px 0; background: #27272a; border: 1px solid #3f3f46; border-radius: 6px; color: #fff; box-sizing: border-box; }
-        textarea { resize: none; height: 75px; font-family: monospace; }
+        textarea { resize: none; height: 85px; font-family: monospace; }
         button { width: 100%; padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; }
         .btn-primary { background: #6366f1; color: white; margin-top: 10px; }
         .btn-success { background: #10b981; color: white; margin-top: 10px; }
@@ -60,8 +60,8 @@
         if (data.success) {
             document.getElementById('resultBox').style.display = 'block';
             
-            // 원하시는 형식대로 정확히 출력
-            let loaderPayload = `scriptkey = "${data.key}"\nloadstring(game:HttpGet("https://luasafe-backend.onrender.com/loader.lua"))()`;
+            // 요청하신 대로 scriptkey 선언과 loadstring 사이에 빈 줄(\n\n)을 두어 한 줄 내린 형태로 출력
+            let loaderPayload = `scriptkey = "${data.key}"\n\nloadstring(game:HttpGet("https://luasafe-backend.onrender.com/loader.lua"))()`;
             document.getElementById('loaderCodeOutput').value = loaderPayload;
 
             document.getElementById('statusText').innerHTML = `<b>상태:</b> <span style="color: #10b981;">${data.status}</span>`;
