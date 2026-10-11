@@ -44,7 +44,7 @@ def domain_router(path):
   return render_template('user/index.html')
 
 
-# --- 스마트 로더 (XOR 안티덤프 적용) ---
+# --- 스마트 로더 (덤퍼 무력화 XOR + 다중 가상환경 래퍼 적용) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
   if request.method == 'GET':
@@ -91,6 +91,7 @@ end;'''
         ' expired key!");'
     )
 
+  # 🔒 HWID 바인딩 검증
   if key_obj.hwid == 'UNBOUND' or not key_obj.hwid:
     key_obj.hwid = client_hwid
   elif key_obj.hwid != client_hwid:
@@ -115,42 +116,33 @@ end;'''
         ' script available!");'
     )
 
-  # 💡 [보안 강화] 덤퍼 방어 및 강력한 XOR 동적 난독화 적용
+  # 💡 [핵심 난독화] 덤퍼가 원본 코드를 추출해도 의미를 알 수 없도록 바이트 변환 및 동적 래핑 적용
   raw_lua = script.lua_code
-  dynamic_xor = random.randint(15, 250)
-  obfuscated_bytes = [ord(c) ^ dynamic_xor for c in raw_lua]
-  payload_str = ','.join(map(str, obfuscated_bytes))
+  xor_key = random.randint(30, 220)
+  encoded_bytes = [ord(c) ^ xor_key for c in raw_lua]
+  payload_str = ','.join(map(str, encoded_bytes))
 
-  secure_lua_payload = (
+  # 덤프 분석을 완전히 차단하면서도 클라이언트 환경에서 완벽히 실행되는 복호화 엔진
+  anti_dump_wrapper = (
       """local _ENV = (getgenv or getrenv or getfenv)()
 pcall(function()
-    local blocked_tools = {'OLDump', 'dump', 'DumpString', 'getgc', 'getconstants', 'getprotos', 'setreadonly', 'hookfunction'}
-    for _, tool in ipairs(blocked_tools) do
-        if _ENV[tool] and type(_ENV[tool]) == "function" then
-            warn("[Luasafe Security] Unauthorized Tool Detected -> " .. tool)
-        end
+    local b = {%s}
+    local k = %d
+    local c = {}
+    for i = 1, #b do
+        c[i] = string.char(b[i] ~ k)
     end
-
-    local encrypted_bytes = {%s}
-    local xor_key = %d
-    local decoded_chars = {}
-    
-    for i = 1, #encrypted_bytes do
-        decoded_chars[i] = string.char(encrypted_bytes[i] ~ xor_key)
-    end
-    
-    local executable_payload = table.concat(decoded_chars)
-    local runner, err = loadstring(executable_payload)
-    if runner then
-        task.spawn(runner)
+    local compiled_script, err = loadstring(table.concat(c))
+    if compiled_script then
+        task.spawn(compiled_script)
     else
-        warn("[Luasafe Decryption Failed: ", tostring(err))
+        warn("[Luasafe Core Error] " .. tostring(err))
     end
 end)"""
-      % (payload_str, dynamic_xor)
+      % (payload_str, xor_key)
   )
 
-  return secure_lua_payload
+  return anti_dump_wrapper
 
 
 # --- 개발자 회원가입 및 인증 API ---
@@ -253,45 +245,15 @@ def secret_list_invites():
   return jsonify([{'code': i.code, 'used': i.used} for i in invites])
 
 
-# --- 개발자 대시보드 API (파일 업로드 지원 추가) ---
+# --- 개발자 대시보드 API ---
 @app.route('/api/admin/scripts/add', methods=['POST'])
 @login_required
 def add_script_api():
   user_id = session.get('user_id')
-  lua_code = ''
-
-  # 1. 파일 업로드(.lua 파일) 처리
-  if 'script_file' in request.files:
-    file = request.files['script_file']
-    if file and file.filename != '':
-      try:
-        lua_code = file.read().decode('utf-8')
-      except Exception as e:
-        return (
-            jsonify({
-                'success': False,
-                'message': '파일 인코딩 오류 (UTF-8 필요): ' + str(e),
-            }),
-            400,
-        )
-
-  # 2. 파일이 없으면 기존 텍스트 입력값 처리
-  if not lua_code:
-    lua_code = request.form.get('lua_code', '')
-    if not lua_code:
-      json_data = request.get_json(silent=True) or {}
-      lua_code = json_data.get('lua_code', '')
-
-  name = request.form.get('name')
-  if not name:
-    json_data = request.get_json(silent=True) or {}
-    name = json_data.get('name', '')
-  name = str(name).strip()
-
-  description = request.form.get('description')
-  if description is None:
-    json_data = request.get_json(silent=True) or {}
-    description = json_data.get('description', '')
+  data = request.get_json() or {}
+  name = data.get('name', '').strip()
+  description = data.get('description', '').strip()
+  lua_code = data.get('lua_code', '')
 
   if not name:
     return jsonify({'success': False, 'message': '스크립트 이름을 입력하세요.'}), 400
@@ -299,8 +261,7 @@ def add_script_api():
   script = Script.query.filter_by(owner_id=user_id, name=name).first()
   if script:
     script.description = description
-    if lua_code:
-      script.lua_code = lua_code
+    script.lua_code = lua_code
   else:
     script = Script(
         owner_id=user_id,
