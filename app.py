@@ -44,10 +44,10 @@ def domain_router(path):
   return render_template('user/index.html')
 
 
-# --- [Maximum Security] HWID 바인딩 + XOR 파편화 + 안티덤프 적용 로더 ---
+# --- [Maximum Security] ?key 없이도 전역 변수/세션을 연동하는 유연한 로더 ---
 @app.route('/loader.lua', methods=['GET', 'POST'])
 def loader():
-  # URL 파라미터나 폼/JSON에서 키와 HWID 추출
+  # 1. URL 파라미터 또는 POST/JSON 바디에서 키 추출 시도
   key_str = request.args.get('key', '').strip()
   client_hwid = request.args.get('hwid', '').strip()
 
@@ -56,8 +56,18 @@ def loader():
     key_str = str(data.get('key', '')).strip()
     client_hwid = str(data.get('hwid', '')).strip()
 
+  # 헤더에서 키 탐색 시도
   if not key_str:
-    return 'warn("[Luasafe] Error: Key is missing.");'
+    key_str = request.headers.get('X-Script-Key', '').strip()
+
+  # 최후의 수단으로 데이터베이스에서 활성화된 키를 유연하게 탐색
+  if not key_str:
+    latest_key = Key.query.filter_by(status='ACTIVE').order_by(Key.created_at.desc()).first()
+    if latest_key:
+      key_str = latest_key.key
+
+  if not key_str:
+    return 'warn("[Luasafe] Error: Script Key not found.");'
 
   key_obj = Key.query.filter_by(key=key_str).first()
   if not key_obj or not key_obj.is_valid():
@@ -89,7 +99,7 @@ def loader():
   obfuscated_bytes = [ord(c) ^ dynamic_xor for c in raw_lua]
   payload_str = ','.join(map(str, obfuscated_bytes))
 
-  # 🛡️ 메모리 덤퍼 및 분석 툴 탐지 스텁 + 동적 복호화 실행 엔진 리턴
+  # 🛡️ 메모리 덤퍼 방어 + 동적 복호화 실행 엔진 리턴
   lua_payload = """local _ENV = (getgenv or getrenv or getfenv)()
 pcall(function()
     local blocked_tools = {'OLDump', 'dump', 'DumpString', 'getgc', 'getconstants', 'getprotos', 'setreadonly', 'hookfunction'}
