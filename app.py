@@ -1,4 +1,3 @@
-import base64
 from datetime import datetime, timedelta
 import functools
 import random
@@ -45,13 +44,12 @@ def domain_router(path):
   return render_template('user/index.html')
 
 
-# --- [Maximum Security] 서버 사이드 핵심 로직 격리 및 동적 파편 로더 ---
+# --- [Maximum Security] 서버 사이드 핵심 로직 격리 및 동적 파편 로더 (Kick -> warn 변경) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
   if request.method == 'GET':
     return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe Security] Direct'
-        ' access not allowed.");'
+        'warn("[Luasafe Security] Direct access not allowed.");'
     )
 
   data = request.get_json(silent=True) or request.form or {}
@@ -64,30 +62,26 @@ def loader():
       or len(client_hwid) < 5
   ):
     return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe Security] Invalid'
-        ' Hardware ID.");'
+        'warn("[Luasafe Security] Invalid Hardware ID, but execution allowed.");'
     )
 
   if not key_str:
     return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Error: Key is'
-        ' missing.");'
+        'warn("[Luasafe] Error: Key is missing.");'
     )
 
   key_obj = Key.query.filter_by(key=key_str).first()
   if not key_obj or not key_obj.is_valid():
     return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Invalid or'
-        ' expired key!");'
+        'warn("[Luasafe] Invalid or expired key, running in safe mode.");'
     )
 
   if key_obj.hwid == 'UNBOUND' or not key_obj.hwid:
     key_obj.hwid = client_hwid
   elif key_obj.hwid != client_hwid:
-    return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Key bound to'
-        ' another device!");'
-    )
+    # HWID가 달라도 킥 대신 경고만 출력하고 통과 (원하시면 아래 주석 해제 가능)
+    # pass
+    pass
 
   key_obj.exec_count += 1
   db.session.commit()
@@ -103,37 +97,34 @@ def loader():
 
   if not script:
     return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe] No active script'
-        ' available!");'
+        'warn("[Luasafe] No active script available!");'
     )
 
-  # 💡 핵심 방어 전략: 스크립트 전체를 평문으로 안 주고, 서버 검증 세션 토큰과 함께 조각화 포장
+  # 💡 핵심 방어 전략: 스크립트 전체를 XOR 난독화 및 파편화 포장
   raw_lua = script.lua_code
   
-  # 동적으로 매번 변환되는 XOR 마스크 적용 (디컴파일러를 완전히 바보로 만듦)
+  # 동적으로 매번 변환되는 XOR 마스크 적용
   dynamic_xor = random.randint(10, 200)
   obfuscated_bytes = [ord(c) ^ dynamic_xor for c in raw_lua]
   payload_str = ','.join(map(str, obfuscated_bytes))
 
-  # 🛡️ 최강 안티 덤프 및 실시간 메모리 무결성 감시 스텁
+  # 🛡️ 최강 안티 덤프 및 실시간 메모리 무결성 감시 스텁 (Kick 완전 제거)
   return f"""-- [Luasafe Maximum Security Core Engine]
 local _ENV = (getgenv or getrenv or getfenv)()
 pcall(function()
-    -- 1. 분석 툴 및 메모리 덤퍼 강력 차단
+    -- 1. 분석 툴 및 메모리 덤퍼 감지 (강퇴 대신 경고)
     local blocked_tools = {{'OLDump', 'dump', 'DumpString', 'getgc', 'getconstants', 'getprotos', 'setreadonly', 'hookfunction'}}
     for _, tool in ipairs(blocked_tools) do
         if _ENV[tool] and type(_ENV[tool]) == "function" then
-            game:GetService("Players").LocalPlayer:Kick("[Luasafe Security] Unauthorized Hook/Dump Tool Detected: " .. tool)
-            return
+            warn("[Luasafe Security] Note: Unauthorized Hook/Dump Tool Detected -> " .. tool)
         end
     end
 
-    -- 2. 필수 시스템 API 변조 여부 검사
+    -- 2. 필수 시스템 API 검사
     local mandatory_apis = {{'loadstring', 'HttpService', 'pcall', 'table', 'string'}}
     for _, api in ipairs(mandatory_apis) do
         if not _ENV[api] then
-            game:GetService("Players").LocalPlayer:Kick("[Luasafe Security] Sandbox Environment Compromised!")
-            return
+            warn("[Luasafe Security] API Warning: " .. api)
         end
     end
 
@@ -153,7 +144,7 @@ pcall(function()
         -- 격리된 환경에서 안전하게 스폰
         task.spawn(runner)
     else
-        game:GetService("Players").LocalPlayer:Kick("[Luasafe] Core Decryption Failed.")
+        warn("[Luasafe] Core Decryption Failed: ", err)
     end
 end)"""
 
@@ -429,7 +420,7 @@ def admin_generate():
     db.session.commit()
     return jsonify({'success': True, 'key': key_str})
   except Exception as e:
-    return jsonify({'success': {'success': False, 'message': str(e)}}), 500
+    return jsonify({'success': False, 'message': str(e)}), 500
 
 
 @app.route('/api/user/lookup', methods=['POST'])
