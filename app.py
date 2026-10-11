@@ -44,42 +44,25 @@ def domain_router(path):
   return render_template('user/index.html')
 
 
-# --- [Maximum Security] ?key 없이도 전역 변수/세션을 연동하는 유연한 로더 ---
+# --- [원조 순정 방식] 가장 깔끔하고 확실하게 작동하는 loader 엔드포인트 ---
 @app.route('/loader.lua', methods=['GET', 'POST'])
 def loader():
-  # 1. URL 파라미터 또는 POST/JSON 바디에서 키 추출 시도
+  # 1. URL 파라미터(?key=...)에서 먼저 키 탐색
   key_str = request.args.get('key', '').strip()
-  client_hwid = request.args.get('hwid', '').strip()
 
+  # 2. 파라미터에 없다면 POST 바디나 폼에서 탐색
   if not key_str:
     data = request.get_json(silent=True) or request.form or {}
     key_str = str(data.get('key', '')).strip()
-    client_hwid = str(data.get('hwid', '')).strip()
-
-  # 헤더에서 키 탐색 시도
-  if not key_str:
-    key_str = request.headers.get('X-Script-Key', '').strip()
-
-  # 최후의 수단으로 데이터베이스에서 활성화된 키를 유연하게 탐색
-  if not key_str:
-    latest_key = Key.query.filter_by(status='ACTIVE').order_by(Key.created_at.desc()).first()
-    if latest_key:
-      key_str = latest_key.key
 
   if not key_str:
-    return 'warn("[Luasafe] Error: Script Key not found.");'
+    return 'warn("[Luasafe] Error: Key is missing.");'
 
   key_obj = Key.query.filter_by(key=key_str).first()
   if not key_obj or not key_obj.is_valid():
     return 'warn("[Luasafe] Invalid or expired key.");'
 
-  # 🔒 HWID 바인딩 로직
-  if key_obj.hwid == 'UNBOUND' or not key_obj.hwid:
-    if client_hwid:
-      key_obj.hwid = client_hwid
-  elif client_hwid and key_obj.hwid != client_hwid:
-    return 'warn("[Luasafe Security] HWID Mismatch! Access Denied.");'
-
+  # 조회수 증가 및 저장
   key_obj.exec_count += 1
   db.session.commit()
 
@@ -93,40 +76,8 @@ def loader():
   if not script:
     return 'warn("[Luasafe] No active script available!");'
 
-  # 💡 덤프 방어를 위한 스크립트 XOR 난독화 처리
-  raw_lua = script.lua_code
-  dynamic_xor = random.randint(10, 200)
-  obfuscated_bytes = [ord(c) ^ dynamic_xor for c in raw_lua]
-  payload_str = ','.join(map(str, obfuscated_bytes))
-
-  # 🛡️ 메모리 덤퍼 방어 + 동적 복호화 실행 엔진 리턴
-  lua_payload = """local _ENV = (getgenv or getrenv or getfenv)()
-pcall(function()
-    local blocked_tools = {'OLDump', 'dump', 'DumpString', 'getgc', 'getconstants', 'getprotos', 'setreadonly', 'hookfunction'}
-    for _, tool in ipairs(blocked_tools) do
-        if _ENV[tool] and type(_ENV[tool]) == "function" then
-            warn("[Luasafe Security] Note: Unauthorized Hook/Dump Tool Detected -> " .. tool)
-        end
-    end
-
-    local encrypted_bytes = {%s}
-    local xor_key = %d
-    local decoded_chars = {}
-    
-    for i = 1, #encrypted_bytes do
-        decoded_chars[i] = string.char(encrypted_bytes[i] ~ xor_key)
-    end
-    
-    local executable_payload = table.concat(decoded_chars)
-    local runner, err = loadstring(executable_payload)
-    if runner then
-        task.spawn(runner)
-    else
-        warn("[Luasafe] Core Decryption Failed: ", tostring(err))
-    end
-end)""" % (payload_str, dynamic_xor)
-
-  return lua_payload
+  # 💡 옛날 그 시절처럼 가공 없이 완벽하게 스크립트 코드 그대로 반환
+  return script.lua_code
 
 
 # --- 개발자 회원가입 및 인증 API ---
