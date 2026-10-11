@@ -9,7 +9,8 @@
         .container { width: 100%; max-width: 450px; }
         .card { background: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 25px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
         h2 { text-align: center; margin-top: 0; }
-        input { width: 100%; padding: 12px; margin: 8px 0; background: #27272a; border: 1px solid #3f3f46; border-radius: 6px; color: #fff; box-sizing: border-box; }
+        input, textarea { width: 100%; padding: 12px; margin: 8px 0; background: #27272a; border: 1px solid #3f3f46; border-radius: 6px; color: #fff; box-sizing: border-box; }
+        textarea { resize: none; height: 75px; font-family: monospace; }
         button { width: 100%; padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; }
         .btn-primary { background: #6366f1; color: white; margin-top: 10px; }
         .btn-success { background: #10b981; color: white; margin-top: 10px; }
@@ -29,7 +30,8 @@
 
         <div id="resultBox" class="info-box">
             <p style="margin: 0 0 8px 0; color: #a1a1aa; font-size: 12px;">복사해서 게임에 실행할 로더 코드:</p>
-            <input type="text" id="loaderCodeOutput" readonly style="background: #18181b; font-size: 12px; color: #10b981; cursor: pointer;" onclick="copyLoaderCode()">
+            <!-- 줄바꿈이 온전히 유지되도록 textarea로 변경 -->
+            <textarea id="loaderCodeOutput" readonly style="background: #18181b; font-size: 12px; color: #10b981; cursor: pointer;" onclick="copyLoaderCode()"></textarea>
             <button class="btn-success" onclick="copyLoaderCode()">로더 코드 복사하기</button>
             <hr style="border: 0; border-top: 1px solid #3f3f46; margin: 12px 0;">
             <p id="statusText" style="margin: 4px 0;"></p>
@@ -58,6 +60,8 @@
 
         if (data.success) {
             document.getElementById('resultBox').style.display = 'block';
+            
+            // scriptkey 선언부와 loadstring이 정확히 줄바꿈되어 출력되도록 설정
             let loaderPayload = `scriptkey = "${data.key}"\nloadstring(game:HttpGet("https://luasafe-backend.onrender.com/loader.lua"))()`;
             document.getElementById('loaderCodeOutput').value = loaderPayload;
 
