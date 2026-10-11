@@ -44,7 +44,7 @@ def domain_router(path):
   return render_template('user/index.html')
 
 
-# --- 스마트 로더 (정상 작동하던 원본 검증 구조) ---
+# --- 스마트 로더 (XOR 안티덤프 적용) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
   if request.method == 'GET':
@@ -115,10 +115,42 @@ end;'''
         ' script available!");'
     )
 
-  return f"""-- [Luasafe Secure Execution]
+  # 💡 [보안 강화] 덤퍼 방어 및 강력한 XOR 동적 난독화 적용
+  raw_lua = script.lua_code
+  dynamic_xor = random.randint(15, 250)
+  obfuscated_bytes = [ord(c) ^ dynamic_xor for c in raw_lua]
+  payload_str = ','.join(map(str, obfuscated_bytes))
+
+  secure_lua_payload = (
+      """local _ENV = (getgenv or getrenv or getfenv)()
 pcall(function()
-    {script.lua_code}
+    local blocked_tools = {'OLDump', 'dump', 'DumpString', 'getgc', 'getconstants', 'getprotos', 'setreadonly', 'hookfunction'}
+    for _, tool in ipairs(blocked_tools) do
+        if _ENV[tool] and type(_ENV[tool]) == "function" then
+            warn("[Luasafe Security] Unauthorized Tool Detected -> " .. tool)
+        end
+    end
+
+    local encrypted_bytes = {%s}
+    local xor_key = %d
+    local decoded_chars = {}
+    
+    for i = 1, #encrypted_bytes do
+        decoded_chars[i] = string.char(encrypted_bytes[i] ~ xor_key)
+    end
+    
+    local executable_payload = table.concat(decoded_chars)
+    local runner, err = loadstring(executable_payload)
+    if runner then
+        task.spawn(runner)
+    else
+        warn("[Luasafe Decryption Failed: ", tostring(err))
+    end
 end)"""
+      % (payload_str, dynamic_xor)
+  )
+
+  return secure_lua_payload
 
 
 # --- 개발자 회원가입 및 인증 API ---
@@ -228,7 +260,7 @@ def add_script_api():
   user_id = session.get('user_id')
   lua_code = ''
 
-  # 1. 파일 업로드(.lua 등)로 소스가 들어온 경우 우선 처리
+  # 1. 파일 업로드(.lua 파일) 처리
   if 'script_file' in request.files:
     file = request.files['script_file']
     if file and file.filename != '':
@@ -243,7 +275,7 @@ def add_script_api():
             400,
         )
 
-  # 2. 파일이 없다면 기존 폼/JSON 텍스트로 처리
+  # 2. 파일이 없으면 기존 텍스트 입력값 처리
   if not lua_code:
     lua_code = request.form.get('lua_code', '')
     if not lua_code:
