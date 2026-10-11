@@ -44,7 +44,7 @@ def domain_router(path):
   return render_template('user/index.html')
 
 
-# --- 스마트 로더 (모바일 실행기 호환 request fallback 적용) ---
+# --- 스마트 로더 (GET: 껍데기 / POST: HWID 검증 및 스크립트 전달) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
   if request.method == 'GET':
@@ -102,7 +102,7 @@ end;'''
         ' expired key!");'
     )
 
-  # HWID 바인딩 로직
+  # HWID 바인딩 검증
   if key_obj.hwid == 'UNBOUND' or not key_obj.hwid:
     key_obj.hwid = client_hwid
   elif key_obj.hwid != client_hwid:
@@ -237,7 +237,7 @@ def add_script_api():
   user_id = session.get('user_id')
   lua_code = ''
 
-  # 파일 업로드로 들어온 경우(.lua 파일 등)
+  # 파일 업로드(멀티파트)로 소스 파일이 전송된 경우 처리
   if 'script_file' in request.files:
     file = request.files['script_file']
     if file and file.filename != '':
@@ -247,12 +247,12 @@ def add_script_api():
         return (
             jsonify({
                 'success': False,
-                'message': '파일 읽기 오류 (UTF-8 필요): ' + str(e),
+                'message': '파일 인코딩 오류 (UTF-8 필요): ' + str(e),
             }),
             400,
         )
 
-  # 파일이 없으면 기존 폼 데이터에서 가져오기
+  # 파일이 없다면 기존 폼/JSON 텍스트로 처리
   if not lua_code:
     lua_code = request.form.get('lua_code', '') or (
         request.get_json(silent=True) or {}
@@ -357,6 +357,7 @@ def admin_delete_key():
   return jsonify({'success': False}), 403
 
 
+# --- 개발자 전용 HWID 초기화 API ---
 @app.route('/api/admin/keys/reset_hwid', methods=['POST'])
 @login_required
 def admin_reset_hwid():
@@ -410,6 +411,7 @@ def admin_generate():
     return jsonify({'success': False, 'message': str(e)}), 500
 
 
+# --- 일반 유저용 키 조회 API ---
 @app.route('/api/user/lookup', methods=['POST'])
 def user_lookup_key():
   data = request.json or {}
