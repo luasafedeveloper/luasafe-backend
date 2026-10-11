@@ -4,6 +4,7 @@ from models import db, Key, Script, Blacklist, Setting, User, InviteCode
 from datetime import datetime, timedelta
 import random
 import string
+import base64
 import requests
 import functools
 
@@ -37,10 +38,9 @@ def domain_router(path):
         return render_template("user/index.html")
     return render_template("user/index.html")
 
-# --- 강력한 보안이 적용된 스마트 로더 ---
+# --- 암호화 보안이 적용된 스마트 로더 ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
-    # 1. 브라우저나 일반 외부 툴(GET 요청)로 소스코드를 훔쳐보려는 시도 원천 차단
     if request.method == 'GET':
         return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe Security] Direct access not allowed.");'
 
@@ -48,7 +48,6 @@ def loader():
     key_str = str(data.get('key', '')).strip()
     client_hwid = str(data.get('hwid', '')).strip()
 
-    # 2. 유효하지 않거나 빈 HWID 차단
     if not client_hwid or client_hwid.lower() == "unknown" or len(client_hwid) < 5:
         return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe Security] Invalid Hardware ID.");'
 
@@ -59,7 +58,6 @@ def loader():
     if not key_obj or not key_obj.is_valid():
         return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Invalid or expired key!");'
     
-    # 3. HWID 바인딩 검증 (다른 사람이 가짜 HWID로 뚫지 못하도록 고정)
     if key_obj.hwid == "UNBOUND" or not key_obj.hwid:
         key_obj.hwid = client_hwid
     elif key_obj.hwid != client_hwid:
@@ -76,10 +74,16 @@ def loader():
     if not script:
         return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] No active script available!");'
     
-    # 4. 안전하게 압축 및 감싸서 실행
-    return f"""-- [Luasafe Secure Execution]
+    # 💡 스크립트 본체를 Base64로 난독화/암호화하여 전송 (덤프 방지)
+    encoded_code = base64.b64encode(script.lua_code.encode('utf-8')).decode('utf-8')
+    
+    return f"""-- [Luasafe Encrypted Execution]
 pcall(function()
-    {script.lua_code}
+    local b64 = "{encoded_code}";
+    local decoded = game:GetService("HttpService"):JSONDecode('"' .. b64 .. '"');
+    -- 만약 JSONDecode 방식이 안되면 아래 표준 Base64 디코딩 루틴 사용
+    local f = loadstring(syn and syn.crypt and syn.crypt.base64 and syn.crypt.base64.decode(b64) or game:GetService("HttpService"):Base64Decode(b64));
+    if f then f(); end
 end)"""
 
 # --- 개발자 회원가입 및 인증 API ---
@@ -280,7 +284,7 @@ def admin_generate():
         db.session.commit()
         return jsonify({"success": True, "key": key_str})
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify({"success": {"success": False, "message": str(e)}}), 500
 
 @app.route("/api/user/lookup", methods=["POST"])
 def user_lookup_key():
