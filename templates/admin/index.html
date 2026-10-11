@@ -20,72 +20,167 @@
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
         th, td { border: 1px solid #27272a; padding: 8px; text-align: left; }
         th { background: #202024; }
+        .auth-container { max-width: 400px; margin: 80px auto; }
+        .hidden { display: none !important; }
+        .toggle-link { color: #6366f1; cursor: pointer; text-align: center; margin-top: 10px; display: block; font-size: 14px; }
     </style>
 </head>
 <body>
 
-<div class="container" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-    <h2>🛠️ Luasafe Developer Dashboard</h2>
-    <button class="btn-danger" onclick="logout()">로그아웃</button>
-</div>
-
-<div class="container">
-    <!-- 스크립트 등록 카드 -->
-    <div class="card">
-        <h3>스크립트 등록 및 수정</h3>
-        <label>스크립트 이름 (예: MyHub.lua)</label>
-        <input type="text" id="scriptName" placeholder="예: MyHub.lua">
+    <!-- 로그인 / 회원가입 화면 -->
+    <div id="authView" class="auth-container card hidden">
+        <h2 id="authTitle" style="text-align: center; margin-bottom: 20px;">🔐 Luasafe 로그인</h2>
         
-        <label>설명</label>
-        <input type="text" id="scriptDesc" placeholder="설명">
+        <div id="registerFields" class="hidden">
+            <label>라이센스 (초대 코드)</label>
+            <input type="text" id="regInvite" placeholder="LUASAFE-XXXX">
+        </div>
 
-        <label>-- 실행될 루아 코드 작성 또는 파일 업로드</label>
-        <textarea id="scriptCode" placeholder="-- 코드를 직접 입력하거나 우측 Upload File 버튼을 누르세요"></textarea>
-        
-        <!-- [스크립트 저장] 버튼 바로 옆에 나란히 배치된 [Upload File] 버튼 -->
-        <div class="button-group">
-            <button class="btn-success" onclick="saveScript()">스크립트 저장</button>
-            <label class="btn-file">
-                📁 Upload File
-                <input type="file" id="scriptFile" accept=".lua,.txt" style="display: none;" onchange="handleFileSelect(event)">
-            </label>
+        <label>아이디</label>
+        <input type="text" id="authUsername" placeholder="Username">
+
+        <label>비밀번호</label>
+        <input type="password" id="authPassword" placeholder="Password">
+
+        <button id="authBtn" class="btn-primary" style="width: 100%; margin-top: 10px;" onclick="handleAuth()">로그인</button>
+        <span id="authToggleText" class="toggle-link" onclick="toggleAuthMode()">계정이 없으신가요? 회원가입</span>
+    </div>
+
+    <!-- 대시보드 화면 -->
+    <div id="dashboardView" class="hidden">
+        <div class="container" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h2>🛠️ Luasafe Developer Dashboard</h2>
+            <button class="btn-danger" onclick="logout()">로그아웃</button>
+        </div>
+
+        <div class="container">
+            <!-- 스크립트 등록 카드 -->
+            <div class="card">
+                <h3>스크립트 등록 및 수정</h3>
+                <label>스크립트 이름 (예: MyHub.lua)</label>
+                <input type="text" id="scriptName" placeholder="예: MyHub.lua">
+                
+                <label>설명</label>
+                <input type="text" id="scriptDesc" placeholder="설명">
+
+                <label>-- 실행될 루아 코드 작성 또는 파일 업로드</label>
+                <textarea id="scriptCode" placeholder="-- 코드를 직접 입력하거나 우측 Upload File 버튼을 누르세요"></textarea>
+                
+                <div class="button-group">
+                    <button class="btn-success" onclick="saveScript()">스크립트 저장</button>
+                    <label class="btn-file">
+                        📁 Upload File
+                        <input type="file" id="scriptFile" accept=".lua,.txt" style="display: none;" onchange="handleFileSelect(event)">
+                    </label>
+                </div>
+            </div>
+
+            <!-- 키 생성 카드 -->
+            <div class="card">
+                <h3>키 생성</h3>
+                <label>연동할 스크립트 선택</label>
+                <select id="genScriptName">
+                    <option value="">-- 스크립트를 선택하세요 --</option>
+                </select>
+                
+                <label>기간</label>
+                <select id="genDuration">
+                    <option value="Hours">시간 (Hours)</option>
+                    <option value="Days">일 (Days)</option>
+                    <option value="Lifetime">평생 (Lifetime)</option>
+                </select>
+
+                <input type="number" id="genAmount" value="24">
+
+                <button class="btn-success" style="width: 100%;" onclick="generateKey()">키 생성하기</button>
+            </div>
+
+            <!-- 스크립트 목록 -->
+            <div class="card">
+                <h3>등록된 내 스크립트 목록</h3>
+                <div id="scriptList">불러오는 중...</div>
+            </div>
+
+            <!-- 키 목록 -->
+            <div class="card">
+                <h3>발급된 키 관리</h3>
+                <div id="keyList">불러오는 중...</div>
+            </div>
         </div>
     </div>
 
-    <!-- 키 생성 카드 -->
-    <div class="card">
-        <h3>키 생성</h3>
-        <label>연동할 스크립트 선택</label>
-        <select id="genScriptName">
-            <option value="">-- 스크립트를 선택하세요 --</option>
-        </select>
-        
-        <label>기간</label>
-        <select id="genDuration">
-            <option value="Hours">시간 (Hours)</option>
-            <option value="Days">일 (Days)</option>
-            <option value="Lifetime">평생 (Lifetime)</option>
-        </select>
-
-        <input type="number" id="genAmount" value="24">
-
-        <button class="btn-success" style="width: 100%;" onclick="generateKey()">키 생성하기</button>
-    </div>
-
-    <!-- 스크립트 목록 -->
-    <div class="card">
-        <h3>등록된 내 스크립트 목록</h3>
-        <div id="scriptList">불러오는 중...</div>
-    </div>
-
-    <!-- 키 목록 -->
-    <div class="card">
-        <h3>발급된 키 관리</h3>
-        <div id="keyList">불러오는 중...</div>
-    </div>
-</div>
-
 <script>
+    let isRegisterMode = false;
+
+    // 페이지 접속 시 세션 상태 확인
+    async function checkSession() {
+        try {
+            let res = await fetch('/api/admin/check_session');
+            let data = await res.json();
+            if (data.logged_in) {
+                document.getElementById('authView').classList.add('hidden');
+                document.getElementById('dashboardView').classList.remove('hidden');
+                loadData();
+            } else {
+                document.getElementById('dashboardView').classList.add('hidden');
+                document.getElementById('authView').classList.remove('hidden');
+            }
+        } catch (e) {
+            document.getElementById('dashboardView').classList.add('hidden');
+            document.getElementById('authView').classList.remove('hidden');
+        }
+    }
+
+    function toggleAuthMode() {
+        isRegisterMode = !isRegisterMode;
+        if (isRegisterMode) {
+            document.getElementById('authTitle').innerText = '📝 Luasafe 회원가입';
+            document.getElementById('authBtn').innerText = '회원가입 하기';
+            document.getElementById('registerFields').classList.remove('hidden');
+            document.getElementById('authToggleText').innerText = '이미 계정이 있으신가요? 로그인';
+        } else {
+            document.getElementById('authTitle').innerText = '🔐 Luasafe 로그인';
+            document.getElementById('authBtn').innerText = '로그인';
+            document.getElementById('registerFields').classList.add('hidden');
+            document.getElementById('authToggleText').innerText = '계정이 없으신가요? 회원가입';
+        }
+    }
+
+    async function handleAuth() {
+        let username = document.getElementById('authUsername').value.trim();
+        let password = document.getElementById('authPassword').value.trim();
+        
+        if (!username || !password) return alert("아이디와 비밀번호를 모두 입력해주세요.");
+
+        if (isRegisterMode) {
+            let invite_code = document.getElementById('regInvite').value.trim();
+            if (!invite_code) return alert("초대 코드를 입력해주세요.");
+
+            let res = await fetch('/api/admin/register', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username, password, invite_code})
+            });
+            let data = await res.json();
+            alert(data.message);
+            if (data.success) {
+                toggleAuthMode(); // 로그인 모드로 전환
+            }
+        } else {
+            let res = await fetch('/api/admin/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username, password})
+            });
+            let data = await res.json();
+            if (data.success) {
+                checkSession();
+            } else {
+                alert(data.message);
+            }
+        }
+    }
+
     function handleFileSelect(event) {
         let file = event.target.files[0];
         if (!file) return;
@@ -99,9 +194,9 @@
 
     async function loadData() {
         let sRes = await fetch('/api/admin/scripts');
+        if (sRes.status === 401) { checkSession(); return; }
         let sData = await sRes.json();
         
-        // 1. 스크립트 목록 테이블 렌더링
         let sHtml = "<table><tr><th>이름</th><th>설명</th><th>상태</th><th>액션</th></tr>";
         let dropdownHtml = '<option value="">-- 스크립트를 선택하세요 --</option>';
         
@@ -111,11 +206,8 @@
         });
         sHtml += "</table>";
         document.getElementById('scriptList').innerHTML = sHtml;
-        
-        // 2. 키 생성 드롭다운 업데이트
         document.getElementById('genScriptName').innerHTML = dropdownHtml;
 
-        // 3. 발급된 키 목록 렌더링
         let kRes = await fetch('/api/admin/keys');
         let kData = await kRes.json();
         let kHtml = "<table><tr><th>키</th><th>스크립트</th><th>만료시간</th><th>HWID</th><th>실행</th><th>관리</th></tr>";
@@ -138,6 +230,7 @@
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({name, description, lua_code: luaCode})
         });
+        if (res.status === 401) { alert("로그인이 만료되었습니다."); checkSession(); return; }
         let data = await res.json();
         if (data.success) {
             alert("스크립트가 안전하게 저장되었습니다!");
@@ -169,6 +262,7 @@
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({script_name, duration_type, amount})
         });
+        if (res.status === 401) { alert("로그인이 만료되었습니다."); checkSession(); return; }
         let data = await res.json();
         if (data.success) {
             alert("키 생성 성공: " + data.key);
@@ -201,10 +295,11 @@
 
     async function logout() {
         await fetch('/api/admin/logout', {method: 'POST'});
-        location.reload();
+        checkSession();
     }
 
-    loadData();
+    // 최초 실행 시 세션 검사
+    checkSession();
 </script>
 
 </body>
