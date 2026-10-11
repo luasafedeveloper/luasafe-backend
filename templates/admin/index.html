@@ -55,8 +55,10 @@
     <!-- 키 생성 카드 -->
     <div class="card">
         <h3>키 생성</h3>
-        <label>연동할 스크립트</label>
-        <input type="text" id="genScriptName" placeholder="예: MyHub.lua">
+        <label>연동할 스크립트 선택</label>
+        <select id="genScriptName">
+            <option value="">-- 스크립트를 선택하세요 --</option>
+        </select>
         
         <label>기간</label>
         <select id="genDuration">
@@ -98,13 +100,22 @@
     async function loadData() {
         let sRes = await fetch('/api/admin/scripts');
         let sData = await sRes.json();
+        
+        // 1. 스크립트 목록 테이블 렌더링
         let sHtml = "<table><tr><th>이름</th><th>설명</th><th>상태</th><th>액션</th></tr>";
+        let dropdownHtml = '<option value="">-- 스크립트를 선택하세요 --</option>';
+        
         sData.forEach(s => {
             sHtml += `<tr><td>${s.name}</td><td>${s.description || '-'}</td><td>${s.active ? '활성' : '비활성'}</td><td><button class="btn-danger" onclick="deleteScript(${s.id})">삭제</button></td></tr>`;
+            dropdownHtml += `<option value="${s.name}">${s.name}</option>`;
         });
         sHtml += "</table>";
         document.getElementById('scriptList').innerHTML = sHtml;
+        
+        // 2. 키 생성 드롭다운 업데이트
+        document.getElementById('genScriptName').innerHTML = dropdownHtml;
 
+        // 3. 발급된 키 목록 렌더링
         let kRes = await fetch('/api/admin/keys');
         let kData = await kRes.json();
         let kHtml = "<table><tr><th>키</th><th>스크립트</th><th>만료시간</th><th>HWID</th><th>실행</th><th>관리</th></tr>";
@@ -147,7 +158,9 @@
     }
 
     async function generateKey() {
-        let script_name = document.getElementById('genScriptName').value.trim();
+        let script_name = document.getElementById('genScriptName').value;
+        if (!script_name) return alert("연동할 스크립트를 선택해주세요.");
+        
         let duration_type = document.getElementById('genDuration').value;
         let amount = document.getElementById('genAmount').value;
 
