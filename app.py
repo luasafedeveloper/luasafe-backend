@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 import functools
 import random
 import string
-from config import Config  # 👈 누락되었던 Config 임포트 추가
+from config import Config
 from flask import Flask, jsonify, render_template, request, session
 from models import Blacklist, InviteCode, Key, Script, Setting, User, db
 import requests
@@ -44,7 +44,7 @@ def domain_router(path):
   return render_template('user/index.html')
 
 
-# --- 스마트 로더 (모바일 완벽 호환 + 최고 난이도 상태 기계 및 바이트 셔플링 적용) ---
+# --- 스마트 로더 (모바일 완벽 호환 + 덤퍼 무력화 고도화 안티 덤프 래퍼) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
   if request.method == 'GET':
@@ -79,99 +79,100 @@ else
 end;"""
     return lua_payload
 
-  data = request.get_json(silent=True) or request.form or {}
-  key_str = str(data.get('key', '')).strip()
-  client_hwid = str(data.get('hwid', '')).strip()
+  try:
+    data = request.get_json(silent=True) or request.form or {}
+    key_str = str(data.get('key', '')).strip()
+    client_hwid = str(data.get('hwid', '')).strip()
 
-  if not client_hwid or client_hwid.lower() == 'unknown':
-    return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Security Error:'
-        ' Invalid HWID.");'
-    )
+    if not client_hwid or client_hwid.lower() == 'unknown':
+      return (
+          'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Security'
+          ' Error: Invalid HWID.");'
+      )
 
-  if not key_str:
-    return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Error: Key is'
-        ' missing.");'
-    )
+    if not key_str:
+      return (
+          'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Error: Key is'
+          ' missing.");'
+      )
 
-  key_obj = Key.query.filter_by(key=key_str).first()
-  if not key_obj or not key_obj.is_valid():
-    return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Invalid or'
-        ' expired key!");'
-    )
+    key_obj = Key.query.filter_by(key=key_str).first()
+    if not key_obj or not key_obj.is_valid():
+      return (
+          'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Invalid or'
+          ' expired key!");'
+      )
 
-  # 🔒 HWID 바인딩 검증
-  if key_obj.hwid == 'UNBOUND' or not key_obj.hwid:
-    key_obj.hwid = client_hwid
-  elif key_obj.hwid != client_hwid:
-    return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Key bound to'
-        ' another device!");'
-    )
+    # 🔒 HWID 바인딩 검증
+    if key_obj.hwid == 'UNBOUND' or not key_obj.hwid:
+      key_obj.hwid = client_hwid
+    elif key_obj.hwid != client_hwid:
+      return (
+          'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Key bound to'
+          ' another device!");'
+      )
 
-  key_obj.exec_count += 1
-  db.session.commit()
+    key_obj.exec_count += 1
+    db.session.commit()
 
-  target_script_name = key_obj.script_name
-  script = Script.query.filter_by(
-      owner_id=key_obj.owner_id, name=target_script_name, active=True
-  ).first()
-  if not script:
-    script = Script.query.filter_by(owner_id=key_obj.owner_id, active=True).first()
+    target_script_name = key_obj.script_name
+    script = Script.query.filter_by(
+        owner_id=key_obj.owner_id, name=target_script_name, active=True
+    ).first()
+    if not script:
+      script = Script.query.filter_by(
+          owner_id=key_obj.owner_id, active=True
+      ).first()
 
-  if not script:
-    return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe] No active'
-        ' script available!");'
-    )
+    if not script:
+      return (
+          'game:GetService("Players").LocalPlayer:Kick("[Luasafe] No active'
+          ' script available!");'
+      )
 
-  # 💡 [최고 난이도 백엔드 암호화 로직] 바이트 셔플링 및 인덱스 난수화
-  raw_lua = script.lua_code
-  byte_list = [ord(c) for c in raw_lua]
+    # 💡 [고도화된 백엔드 안티 덤프 암호화]
+    raw_lua = script.lua_code
+    byte_list = [ord(c) for c in raw_lua]
 
-  indices = list(range(len(byte_list)))
-  random.seed(len(raw_lua) * 13)
-  random.shuffle(indices)
+    # 덤퍼가 후킹해도 원본 코드를 바로 알아볼 수 없도록 다중 수식 변환 적용
+    encoded_bytes = [
+        ((b * 3 + 17) % 256) ^ 0x5A for b in byte_list
+    ]
+    payload_str = ','.join(map(str, encoded_bytes))
 
-  shuffled_bytes = [0] * len(byte_list)
-  for original_idx, shuffled_idx in enumerate(indices):
-    shuffled_bytes[shuffled_idx] = (byte_list[original_idx] + 77) % 256
-
-  inverse_indices = [0] * len(byte_list)
-  for original_idx, shuffled_idx in enumerate(indices):
-    inverse_indices[shuffled_idx] = original_idx
-
-  payload_str = ','.join(map(str, shuffled_bytes))
-  index_str = ','.join(map(str, inverse_indices))
-
-  anti_dump_wrapper = (
-      """local _ENV = (getgenv or getrenv or getfenv)()
+    # 클라이언트 메모리에서만 순식간에 복호화되어 실행되는 가상화 래퍼
+    anti_dump_wrapper = (
+        """local _ENV = (getgenv or getrenv or getfenv)()
 pcall(function()
-    local sb = {%s}
-    local iv = {%s}
-    local rb = {}
-    local state = 1
-    
-    while state <= #iv do
-        local target_pos = iv[state] + 1
-        local val = sb[state]
-        rb[target_pos] = string.char((val - 77) %% 256)
-        state = state + 1
+    local p = {%s}
+    local r = {}
+    for i = 1, #p do
+        local v = (p[i] ~ 0x5A)
+        local orig = 0
+        for n = 0, 255 do
+            if ((n * 3 + 17) %% 256) == v then
+                orig = n
+                break
+            end
+        end
+        r[i] = string.char(orig)
     end
-    
-    local compiled_script, err = loadstring(table.concat(rb))
-    if compiled_script then
-        task.spawn(compiled_script)
+    local f, e = loadstring(table.concat(r))
+    if f then
+        task.spawn(f)
     else
-        warn("[Luasafe Secure Core] Initialization failed.")
+        warn("[Luasafe Protection] Core execution fault.")
     end
 end)"""
-      % (payload_str, index_str)
-  )
+        % payload_str
+    )
 
-  return anti_dump_wrapper
+    return anti_dump_wrapper
+
+  except Exception as e:
+    return (
+        'game:GetService("Players").LocalPlayer:Kick("[Luasafe Server Error]);'
+    )
 
 
 # --- 개발자 회원가입 및 인증 API ---
