@@ -44,14 +44,14 @@ def domain_router(path):
   return render_template('user/index.html')
 
 
-# --- [Maximum Security] GET/POST 모두 지원하는 유연한 파편 로더 ---
+# --- 순정 로더 엔드포인트 (GET 파라미터 방식 지원) ---
 @app.route('/loader.lua', methods=['GET', 'POST'])
 def loader():
-  # 1. GET 방식(URL 파라미터)과 POST 방식(JSON/Form) 모두에서 키와 HWID 추출
-  if request.method == 'GET':
-    key_str = request.args.get('key', '').strip()
-    client_hwid = request.args.get('hwid', '').strip()
-  else:
+  # URL 파라미터나 폼/JSON에서 키 추출
+  key_str = request.args.get('key', '').strip()
+  client_hwid = request.args.get('hwid', '').strip()
+
+  if not key_str:
     data = request.get_json(silent=True) or request.form or {}
     key_str = str(data.get('key', '')).strip()
     client_hwid = str(data.get('hwid', '')).strip()
@@ -63,7 +63,6 @@ def loader():
   if not key_obj or not key_obj.is_valid():
     return 'warn("[Luasafe] Invalid or expired key.");'
 
-  # HWID 바인딩 처리
   if key_obj.hwid == 'UNBOUND' or not key_obj.hwid:
     if client_hwid:
       key_obj.hwid = client_hwid
@@ -83,39 +82,8 @@ def loader():
   if not script:
     return 'warn("[Luasafe] No active script available!");'
 
-  # 💡 핵심 방어 전략: 스크립트 전체를 매번 다르게 XOR 난독화
-  raw_lua = script.lua_code
-  dynamic_xor = random.randint(10, 200)
-  obfuscated_bytes = [ord(c) ^ dynamic_xor for c in raw_lua]
-  payload_str = ','.join(map(str, obfuscated_bytes))
-
-  # 🛡️ 메모리 덤프 및 후킹 방어 코드가 포함된 실행 엔진 리턴
-  return f"""-- [Luasafe Maximum Security Core Engine]
-local _ENV = (getgenv or getrenv or getfenv)()
-pcall(function()
-    local blocked_tools = {{'OLDump', 'dump', 'DumpString', 'getgc', 'getconstants', 'getprotos', 'setreadonly', 'hookfunction'}}
-    for _, tool in ipairs(blocked_tools) do
-        if _ENV[tool] and type(_ENV[tool]) == "function" then
-            warn("[Luasafe Security] Unauthorized Hook/Dump Tool Detected -> " .. tool)
-        end
-    end
-
-    local encrypted_bytes = {{{payload_str}}}
-    local xor_key = {dynamic_xor}
-    local decoded_chars = {{}}
-    
-    for i = 1, #encrypted_bytes do
-        decoded_chars[i] = string.char(encrypted_bytes[i] ~ xor_key)
-    end
-    
-    local executable_payload = table.concat(decoded_chars)
-    local runner, err = loadstring(executable_payload)
-    if runner then
-        task.spawn(runner)
-    else
-        warn("[Luasafe] Core Decryption Failed: ", err)
-    end
-end)"""
+  # 원본 순정 스크립트 그대로 반환 (정상 실행)
+  return script.lua_code
 
 
 # --- 개발자 회원가입 및 인증 API ---
@@ -172,7 +140,7 @@ def dev_logout():
   return jsonify({'success': True})
 
 
-# --- 라이센스 페이지 마스터 로그인 ---
+# --- 라이센스 페이지 마스터 로그인 (solar / $kyle0924) ---
 @app.route('/api/secret/login', methods=['POST'])
 def secret_login():
   data = request.get_json() or {}
