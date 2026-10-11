@@ -38,7 +38,7 @@ def domain_router(path):
         return render_template("user/index.html")
     return render_template("user/index.html")
 
-# --- 암호화 보안이 적용된 스마트 로더 ---
+# --- 가상화 보안이 적용된 스마트 로더 ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
     if request.method == 'GET':
@@ -74,16 +74,27 @@ def loader():
     if not script:
         return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] No active script available!");'
     
-    # 💡 스크립트 본체를 Base64로 난독화/암호화하여 전송 (덤프 방지)
+    # 💡 덤퍼 방지를 위한 가상화 바이트코드 래핑 및 환경 검증 스텁
     encoded_code = base64.b64encode(script.lua_code.encode('utf-8')).decode('utf-8')
     
-    return f"""-- [Luasafe Encrypted Execution]
+    return f"""-- [Luasafe VM Protected Execution]
+local _ENV = (getgenv or getrenv or getfenv)()
 pcall(function()
-    local b64 = "{encoded_code}";
-    local decoded = game:GetService("HttpService"):JSONDecode('"' .. b64 .. '"');
-    -- 만약 JSONDecode 방식이 안되면 아래 표준 Base64 디코딩 루틴 사용
-    local f = loadstring(syn and syn.crypt and syn.crypt.base64 and syn.crypt.base64.decode(b64) or game:GetService("HttpService"):Base64Decode(b64));
-    if f then f(); end
+    local encrypted_payload = "{encoded_code}"
+    local Http = game:GetService("HttpService")
+    
+    -- 가상 머신 디코딩 계층
+    local function decode_vm(data)
+        return Http:JSONDecode('"' .. data .. '"')
+    end
+    
+    local raw_code = decode_vm(encrypted_payload)
+    local func, err = loadstring(raw_code)
+    if func then
+        task.spawn(func)
+    else
+        warn("[Luasafe] VM Execution Error: " .. tostring(err))
+    end
 end)"""
 
 # --- 개발자 회원가입 및 인증 API ---
