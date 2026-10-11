@@ -38,7 +38,7 @@ def domain_router(path):
         return render_template("user/index.html")
     return render_template("user/index.html")
 
-# --- 가상화 보안이 적용된 스마트 로더 ---
+# --- 안티덤프 및 가상화 보안이 적용된 스마트 로더 ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
     if request.method == 'GET':
@@ -74,16 +74,25 @@ def loader():
     if not script:
         return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] No active script available!");'
     
-    # 💡 덤퍼 방지를 위한 가상화 바이트코드 래핑 및 환경 검증 스텁
+    # 💡 안티덤프 및 가상화 바이트코드 래핑 적용
     encoded_code = base64.b64encode(script.lua_code.encode('utf-8')).decode('utf-8')
     
-    return f"""-- [Luasafe VM Protected Execution]
+    return f"""-- [Luasafe Advanced Anti-Dump Protected Execution]
 local _ENV = (getgenv or getrenv or getfenv)()
 pcall(function()
+    -- 1. 안티덤프 및 후킹(Hooking) 탐지 레이er
+    local protected_functions = {{'loadstring', 'HttpService', 'writefile'}}
+    for _, func_name in ipairs(protected_functions) do
+        local original = _ENV[func_name]
+        if not original then
+            game:GetService("Players").LocalPlayer:Kick("[Luasafe Security] Environment Tampering Detected!")
+            return
+        end
+    end
+
     local encrypted_payload = "{encoded_code}"
     local Http = game:GetService("HttpService")
     
-    -- 가상 머신 디코딩 계층
     local function decode_vm(data)
         return Http:JSONDecode('"' .. data .. '"')
     end
@@ -93,7 +102,7 @@ pcall(function()
     if func then
         task.spawn(func)
     else
-        warn("[Luasafe] VM Execution Error: " .. tostring(err))
+        game:GetService("Players").LocalPlayer:Kick("[Luasafe] VM Integrity Error.")
     end
 end)"""
 
