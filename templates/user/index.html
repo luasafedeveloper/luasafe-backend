@@ -30,7 +30,6 @@
 
         <div id="resultBox" class="info-box">
             <p style="margin: 0 0 8px 0; color: #a1a1aa; font-size: 12px;">복사해서 게임에 실행할 로더 코드:</p>
-            <!-- 줄바꿈이 온전히 유지되도록 textarea로 변경 -->
             <textarea id="loaderCodeOutput" readonly style="background: #18181b; font-size: 12px; color: #10b981; cursor: pointer;" onclick="copyLoaderCode()"></textarea>
             <button class="btn-success" onclick="copyLoaderCode()">로더 코드 복사하기</button>
             <hr style="border: 0; border-top: 1px solid #3f3f46; margin: 12px 0;">
@@ -61,7 +60,7 @@
         if (data.success) {
             document.getElementById('resultBox').style.display = 'block';
             
-            // scriptkey 선언부와 loadstring이 정확히 줄바꿈되어 출력되도록 설정
+            // 원하시는 형식대로 정확히 출력
             let loaderPayload = `scriptkey = "${data.key}"\nloadstring(game:HttpGet("https://luasafe-backend.onrender.com/loader.lua"))()`;
             document.getElementById('loaderCodeOutput').value = loaderPayload;
 
