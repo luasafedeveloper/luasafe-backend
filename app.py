@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 import functools
 import random
 import string
-from config import Config
+from config import Config  # 👈 누락되었던 Config 임포트 추가
 from flask import Flask, jsonify, render_template, request, session
 from models import Blacklist, InviteCode, Key, Script, Setting, User, db
 import requests
@@ -232,7 +232,6 @@ def dev_logout():
 @app.route('/api/secret/login', methods=['POST'])
 def secret_login():
   data = request.get_json() or {}
-  # 💡 수정된 부분: 정상적인 괄호 사용
   if data.get('username') == 'solar' and data.get('password') == '$kyle0924':
     session['master_logged_in'] = True
     return jsonify({'success': True})
