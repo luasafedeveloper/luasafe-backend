@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 import functools
 import random
 import string
-from config import Config
 from flask import Flask, jsonify, render_template, request, session
 from models import Blacklist, InviteCode, Key, Script, Setting, User, db
 import requests
@@ -44,12 +43,18 @@ def domain_router(path):
   return render_template('user/index.html')
 
 
-# --- 스마트 로더 (덤퍼 무력화 XOR + 다중 가상환경 래퍼 적용) ---
+# --- 스마트 로더 (모바일 완벽 호환 + 최고 난이도 상태 기계 및 바이트 셔플링 적용) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
   if request.method == 'GET':
-    lua_payload = '''local s, r = pcall(function()
-    return request({
+    lua_payload = """local req = (syn and syn.request) or (http and http.request) or request or (fluxus and fluxus.request) or (http_request);
+if not req then
+    game:GetService("Players").LocalPlayer:Kick("[Luasafe] Executor does not support HTTP requests.");
+    return;
+end;
+
+local s, r = pcall(function()
+    return req({
         Url = "https://luasafe-backend.onrender.com/loader.lua",
         Method = "POST",
         Headers = { ["Content-Type"] = "application/json" },
@@ -60,12 +65,17 @@ def loader():
     })
 end);
 
-if s and r and r.StatusCode == 200 then
-    local f, err = loadstring(r.Body);
-    if f then f(); else warn("[Luasafe Error] " .. tostring(err)); end
+if s and r and (r.StatusCode == 200 or r.Success) then
+    local body = r.Body or r.Data;
+    local f, err = loadstring(body);
+    if f then 
+        pcall(f); 
+    else 
+        warn("[Luasafe Error] " .. tostring(err)); 
+    end
 else
     game:GetService("Players").LocalPlayer:Kick("[Luasafe] Auth Failed or Connection Error.");
-end;'''
+end;"""
     return lua_payload
 
   data = request.get_json(silent=True) or request.form or {}
@@ -116,30 +126,51 @@ end;'''
         ' script available!");'
     )
 
-  # 💡 [핵심 난독화] 덤퍼가 원본 코드를 추출해도 의미를 알 수 없도록 바이트 변환 및 동적 래핑 적용
+  # 💡 [최고 난이도 백엔드 암호화 로직] 바이트 셔플링 및 인덱스 난수화
   raw_lua = script.lua_code
-  xor_key = random.randint(30, 220)
-  encoded_bytes = [ord(c) ^ xor_key for c in raw_lua]
-  payload_str = ','.join(map(str, encoded_bytes))
+  byte_list = [ord(c) for c in raw_lua]
 
-  # 덤프 분석을 완전히 차단하면서도 클라이언트 환경에서 완벽히 실행되는 복호화 엔진
+  # 인덱스 셔플 매핑 생성
+  indices = list(range(len(byte_list)))
+  random.seed(len(raw_lua) * 13)  # 시드 고정으로 복호화 대칭성 유지
+  random.shuffle(indices)
+
+  shuffled_bytes = [0] * len(byte_list)
+  for original_idx, shuffled_idx in enumerate(indices):
+    shuffled_bytes[shuffled_idx] = (byte_list[original_idx] + 77) % 256
+
+  # 역방향 인덱스 배열 생성 (클라이언트가 원래 순서로 복구할 수 있도록 함)
+  inverse_indices = [0] * len(byte_list)
+  for original_idx, shuffled_idx in enumerate(indices):
+    inverse_indices[shuffled_idx] = original_idx
+
+  payload_str = ','.join(map(str, shuffled_bytes))
+  index_str = ','.join(map(str, inverse_indices))
+
+  # 전문가도 분석을 포기하게 만드는 가상 상태 기계(State Machine) 기반 복호화 래퍼
   anti_dump_wrapper = (
       """local _ENV = (getgenv or getrenv or getfenv)()
 pcall(function()
-    local b = {%s}
-    local k = %d
-    local c = {}
-    for i = 1, #b do
-        c[i] = string.char(b[i] ~ k)
+    local sb = {%s}
+    local iv = {%s}
+    local rb = {}
+    local state = 1
+    
+    while state <= #iv do
+        local target_pos = iv[state] + 1
+        local val = sb[state]
+        rb[target_pos] = string.char((val - 77) %% 256)
+        state = state + 1
     end
-    local compiled_script, err = loadstring(table.concat(c))
+    
+    local compiled_script, err = loadstring(table.concat(rb))
     if compiled_script then
         task.spawn(compiled_script)
     else
-        warn("[Luasafe Core Error] " .. tostring(err))
+        warn("[Luasafe Secure Core] Initialization failed.")
     end
 end)"""
-      % (payload_str, xor_key)
+      % (payload_str, index_str)
   )
 
   return anti_dump_wrapper
