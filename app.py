@@ -11,6 +11,9 @@ app = Flask(__name__)
 app.config.from_object(Config)
 db.init_app(app)
 
+# 서버 메모리 기반 IP 저장소
+KEY_IPS = {}
+
 with app.app_context():
   db.create_all()
 
@@ -44,17 +47,18 @@ def domain_router(path):
   return render_template('user/index.html')
 
 
-# --- 스마트 로더 (HWID 및 IP 수집 및 검증 적용) ---
+# --- 스마트 로더 (UTF-8 바이트 안전 처리 + 롤링 키 난독화) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
   if request.method == 'GET':
     lua_payload = """local s, r = pcall(function()
+    local userKey = Scriptkey or scriptkey or ""
     return request({
         Url = "https://luasafe-backend.onrender.com/loader.lua",
         Method = "POST",
         Headers = { ["Content-Type"] = "application/json" },
         Body = game:GetService("HttpService"):JSONEncode({
-            key = scriptkey,
+            key = userKey,
             hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())
         })
     })
@@ -106,11 +110,8 @@ end;"""
           ' another device!");'
       )
 
-    # 💡 IP 정보 저장 및 독립 관리 처리
-    try:
-      key_obj.ip = client_ip
-    except Exception:
-      pass
+    # IP 기록
+    KEY_IPS[key_str] = client_ip
 
     key_obj.exec_count += 1
     db.session.commit()
@@ -130,35 +131,33 @@ end;"""
           ' script available!");'
       )
 
-    # 🔒 [덤퍼 차단 난독화] 원본 코드를 바이트 단위로 암호화하여 전송
+    # 🔒 [UTF-8 바이트 기반 롤링 키 난독화] 한글/UI 깨짐 방지 & 고난도 보호
     raw_lua = script.lua_code
-    byte_list = [ord(c) for c in raw_lua]
-    encoded_bytes = [
-        ((b * 5 + 23) % 256) ^ 0x65 for b in byte_list
-    ]
+    raw_bytes = raw_lua.encode('utf-8')  # 한글 및 특수문자를 안전한 바이트로 변환
+
+    encoded_bytes = []
+    base_key = 0x5A
+    for i, b in enumerate(raw_bytes):
+      dynamic_key = (base_key + (i * 3)) % 256
+      encoded_bytes.append(b ^ dynamic_key)
+
     payload_str = ','.join(map(str, encoded_bytes))
 
     return (
-        """-- [Luasafe Secure Execution]
+        """-- [Luasafe Advanced Secure Execution]
 pcall(function()
-    local p = {%s}
-    local r = {}
-    for i = 1, #p do
-        local v = (p[i] ~ 0x65)
-        local orig = 0
-        for n = 0, 255 do
-            if ((n * 5 + 23) %% 256) == v then
-                orig = n
-                break
-            end
-        end
-        r[i] = string.char(orig)
+    local enc = {%s}
+    local dec = {}
+    for i = 1, #enc do
+        local dynamic_key = (90 + ((i - 1) * 3)) %% 256
+        dec[i] = string.char(enc[i] ~ dynamic_key)
     end
-    local f, e = loadstring(table.concat(r))
+    local code = table.concat(dec)
+    local f, err = loadstring(code)
     if f then
         task.spawn(f)
     else
-        warn("[Luasafe Error] " .. tostring(e))
+        warn("[Luasafe Error] " .. tostring(err))
     end
 end)"""
         % payload_str
@@ -351,7 +350,7 @@ def admin_keys():
       'tier': k.tier,
       'status': k.status,
       'hwid': k.hwid if k.hwid else 'UNBOUND',
-      'ip': getattr(k, 'ip', '미등록') if getattr(k, 'ip', None) else '미등록',  # 독립된 IP 필드 전송
+      'ip': KEY_IPS.get(k.key, '미등록'),
       'expiry': k.remaining_time(),
       'execs': k.exec_count,
       'script_name': k.script_name,
@@ -365,13 +364,14 @@ def admin_delete_key():
   data = request.get_json() or {}
   key_obj = Key.query.filter_by(id=data.get('id'), owner_id=user_id).first()
   if key_obj:
+    if key_obj.key in KEY_IPS:
+      del KEY_IPS[key_obj.key]
     db.session.delete(key_obj)
     db.session.commit()
     return jsonify({'success': True})
   return jsonify({'success': False}), 403
 
 
-# --- 개발자 전용 HWID 초기화 API ---
 @app.route('/api/admin/keys/reset_hwid', methods=['POST'])
 @login_required
 def admin_reset_hwid():
@@ -379,14 +379,13 @@ def admin_reset_hwid():
   data = request.get_json() or {}
   key_obj = Key.query.filter_by(id=data.get('id'), owner_id=user_id).first()
   if not key_obj:
-    return jsonify({'success': False, 'message': '키를 찾을 수 없거나 권한이 없습니다.'}), 403
+    return jsonify({'success': False, 'message': '키를 찾을 수 없습니다.'}), 403
 
   key_obj.hwid = 'UNBOUND'
   db.session.commit()
   return jsonify({'success': True, 'message': 'HWID가 초기화되었습니다.'})
 
 
-# --- 개발자 전용 IP 초기화 API ---
 @app.route('/api/admin/keys/reset_ip', methods=['POST'])
 @login_required
 def admin_reset_ip():
@@ -394,13 +393,10 @@ def admin_reset_ip():
   data = request.get_json() or {}
   key_obj = Key.query.filter_by(id=data.get('id'), owner_id=user_id).first()
   if not key_obj:
-    return jsonify({'success': False, 'message': '키를 찾을 수 없거나 권한이 없습니다.'}), 403
+    return jsonify({'success': False, 'message': '키를 찾을 수 없습니다.'}), 403
 
-  try:
-    key_obj.ip = '미등록'
-  except Exception:
-    pass
-  db.session.commit()
+  if key_obj.key in KEY_IPS:
+    KEY_IPS[key_obj.key] = '미등록'
   return jsonify({'success': True, 'message': 'IP가 초기화되었습니다.'})
 
 
@@ -415,8 +411,8 @@ def admin_generate():
     amount = int(data.get('amount', 24))
 
     chars = string.ascii_uppercase + string.digits
-    random_part = ''.join(random.choices(chars, k=16))
-    key_str = f'luasafe-{random_part[:4]}-{random_part[4:8]}-{random_part[8:12]}'
+    random_print = ''.join(random.choices(chars, k=16))
+    key_str = f'luasafe-{random_print[:4]}-{random_print[4:8]}-{random_print[8:12]}'
 
     expires = (
         None
@@ -443,7 +439,6 @@ def admin_generate():
     return jsonify({'success': False, 'message': str(e)}), 500
 
 
-# --- 일반 유저용 키 조회 API ---
 @app.route('/api/user/lookup', methods=['POST'])
 def user_lookup_key():
   data = request.json or {}
@@ -462,7 +457,7 @@ def user_lookup_key():
       'tier': key_obj.tier,
       'status': key_obj.status,
       'hwid': key_obj.hwid if key_obj.hwid else 'UNBOUND',
-      'ip': getattr(key_obj, 'ip', '미등록'),
+      'ip': KEY_IPS.get(key_obj.key, '미등록'),
       'expiry': key_obj.remaining_time(),
       'execs': key_obj.exec_count,
       'script_name': key_obj.script_name,
