@@ -6,19 +6,20 @@
     <title>Luasafe Admin Dashboard</title>
     <style>
         body { background-color: #0f0f12; color: #e1e1e6; font-family: sans-serif; margin: 0; padding: 20px; }
-        .container { max-width: 800px; margin: 0 auto; }
+        .container { max-width: 900px; margin: 0 auto; }
         .card { background: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
         input, textarea, select { width: 100%; padding: 10px; margin: 6px 0 12px 0; background: #27272a; border: 1px solid #3f3f46; border-radius: 6px; color: #fff; box-sizing: border-box; }
         textarea { height: 150px; font-family: monospace; resize: vertical; }
-        button, label.btn-file { padding: 10px 15px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; display: inline-block; text-align: center; }
+        button, label.btn-file { padding: 8px 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; display: inline-block; text-align: center; }
         .btn-primary { background: #6366f1; color: white; }
         .btn-danger { background: #ef4444; color: white; }
         .btn-success { background: #10b981; color: white; }
+        .btn-warning { background: #f59e0b; color: white; }
         .btn-file { background: #3f3f46; color: white; }
         .button-group { display: flex; gap: 10px; margin-top: 5px; }
         .button-group button, .button-group label { flex: 1; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
-        th, td { border: 1px solid #27272a; padding: 8px; text-align: left; }
+        th, td { border: 1px solid #27272a; padding: 8px; text-align: left; word-break: break-all; }
         th { background: #202024; }
         .auth-container { max-width: 400px; margin: 80px auto; }
         .hidden { display: none !important; }
@@ -103,7 +104,7 @@
 
             <!-- 키 목록 -->
             <div class="card">
-                <h3>발급된 키 관리</h3>
+                <h3>발급된 키 관리 (HWID / IP 분리)</h3>
                 <div id="keyList">불러오는 중...</div>
             </div>
         </div>
@@ -209,11 +210,24 @@
 
         let kRes = await fetch('/api/admin/keys');
         let kData = await kRes.json();
-        let kHtml = "<table><tr><th>키</th><th>스크립트</th><th>만료시간</th><th>HWID / IP</th><th>실행</th><th>관리</th></tr>";
+        
+        // 💡 HWID와 IP 칸을 완전히 분리한 테이블 컬럼 구조
+        let kHtml = "<table><tr><th>키</th><th>스크립트</th><th>만료시간</th><th>HWID</th><th>IP 주소</th><th>실행</th><th>관리</th></tr>";
         kData.forEach(k => {
-            // HWID 옆에 IP가 깔끔하게 노출되도록 렌더링 수정
-            let ipDisplay = (k.ip && k.ip !== '지정 안됨') ? `<br><small style="color: #a1a1aa;">IP: ${k.ip}</small>` : '';
-            kHtml += `<tr><td>${k.key}</td><td>${k.script_name || '-'}</td><td>${k.expiry}</td><td>${k.hwid}${ipDisplay}</td><td>${k.execs}</td><td><button class="btn-danger" onclick="deleteKey(${k.id})">삭제</button> <button class="btn-primary" onclick="resetHwid(${k.id})">HWID초기화</button></td></tr>`;
+            let ipVal = (k.ip && k.ip !== '지정 안됨') ? k.ip : '<span style="color:#71717a;">미등록</span>';
+            kHtml += `<tr>
+                <td>${k.key}</td>
+                <td>${k.script_name || '-'}</td>
+                <td>${k.expiry}</td>
+                <td><small>${k.hwid}</small></td>
+                <td><small>${ipVal}</small></td>
+                <td>${k.execs}</td>
+                <td>
+                    <button class="btn-danger" onclick="deleteKey(${k.id})">삭제</button> 
+                    <button class="btn-primary" onclick="resetHwid(${k.id})">HWID초기화</button>
+                    <button class="btn-warning" onclick="resetIp(${k.id})">IP초기화</button>
+                </td>
+            </tr>`;
         });
         kHtml += "</table>";
         document.getElementById('keyList').innerHTML = kHtml;
@@ -285,6 +299,17 @@
 
     async function resetHwid(id) {
         let res = await fetch('/api/admin/keys/reset_hwid', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: id})
+        });
+        let data = await res.json();
+        alert(data.message);
+        loadData();
+    }
+
+    async function resetIp(id) {
+        let res = await fetch('/api/admin/keys/reset_ip', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({id: id})
