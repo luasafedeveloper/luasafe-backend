@@ -47,7 +47,7 @@ def domain_router(path):
   return render_template('user/index.html')
 
 
-# --- 스마트 로더 (XOR 바이트 난독화 + IP 수집 적용) ---
+# --- 스마트 로더 (Hex 스트링 XOR 난독화 + IP 수집 적용) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
   if request.method == 'GET':
@@ -131,19 +131,20 @@ end;"""
           ' script available!");'
       )
 
-    # 🔒 [안전한 XOR 바이트 난독화] 덤프 방어 + UI/한글 깨짐 방지
+    # 🔒 [Hex 기반 안전한 XOR 난독화] 덤프 방어 + 한글/UI 깨짐 방지 + 대용량 코드 지원
     raw_lua = script.lua_code
     raw_bytes = raw_lua.encode('utf-8')
     xor_key = 0x5A
-    encoded_bytes = [b ^ xor_key for b in raw_bytes]
-    payload_str = ','.join(map(str, encoded_bytes))
+    encoded_bytes = bytes([b ^ xor_key for b in raw_bytes])
+    payload_hex = ''.join(f'\\x{b:02x}' for b in encoded_bytes)
 
     return f"""-- [Luasafe Secure Execution]
 pcall(function()
-    local enc = {{{payload_str}}}
+    local enc = "{payload_hex}"
     local dec = {{}}
     for i = 1, #enc do
-        dec[i] = string.char(enc[i] ~ 0x5A)
+        local b = enc:byte(i)
+        dec[i] = string.char(bit32.bxor(b, 0x5A))
     end
     local code = table.concat(dec)
     local f, err = loadstring(code)
