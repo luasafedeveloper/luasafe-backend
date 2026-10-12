@@ -45,7 +45,7 @@ def domain_router(path):
     return render_template('user/index.html')
 
 
-# --- 스마트 로더 (고도화된 동적 다중 난독화 + 바이트 역순 + IP 수집 적용) ---
+# --- 스마트 로더 (안정적인 바이트 배열 다중 난독화 + 무작위 변수명) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
     if request.method == 'GET':
@@ -129,42 +129,41 @@ end;"""
                 ' script available!");'
             )
 
-        # 🔒 [고도화된 동적 다중 난독화 v2] 매 요청마다 키와 변수명이 무작위로 변경됨
-        raw_lua = script.lua_code
+        # 🔒 [안전하고 강력한 바이트 배열 난독화 v3]
+        raw_lua = script.lua_code or ""
         raw_bytes = raw_lua.encode('utf-8')
         
-        # 1. 매 요청마다 완전히 다른 무작위 키 생성 (16 ~ 239)
-        dyn_key = random.randint(16, 239)
+        # 1. 무작위 키 생성 (1 ~ 255)
+        dyn_key = random.randint(1, 255)
         
-        # 2. 바이트 역순 정렬 + 동적 XOR 이중 암호화
-        reversed_bytes = raw_bytes[::-1]
-        encoded_bytes = bytes([b ^ dyn_key for b in reversed_bytes])
-        payload_hex = ''.join(f'\\x{b:02x}' for b in encoded_bytes)
+        # 2. 바이트 역순 + XOR 암호화 후 숫자 CSV 배열로 변환
+        encoded_bytes = [b ^ dyn_key for b in raw_bytes[::-1]]
+        bytes_csv = ",".join(map(str, encoded_bytes))
         
-        # 3. 매번 바뀌는 무작위 변수명 생성 (정적 패턴 분석 원천 방어)
-        v_enc = ''.join(random.choices(string.ascii_lowercase, k=6))
-        v_dec = ''.join(random.choices(string.ascii_lowercase, k=6))
+        # 3. 매번 바뀌는 무작위 변수명 생성
+        v_data = ''.join(random.choices(string.ascii_lowercase, k=6))
         v_key = ''.join(random.choices(string.ascii_lowercase, k=6))
-        v_code = ''.join(random.choices(string.ascii_lowercase, k=6))
-        v_func = ''.join(random.choices(string.ascii_lowercase, k=6))
+        v_t = ''.join(random.choices(string.ascii_lowercase, k=6))
+        v_arr = ''.join(random.choices(string.ascii_lowercase, k=6))
+        v_final = ''.join(random.choices(string.ascii_lowercase, k=6))
+        v_fn = ''.join(random.choices(string.ascii_lowercase, k=6))
 
-        return f"""-- [Luasafe Advanced Secure Execution v2]
+        return f"""-- [Luasafe Stable Secure Execution v3]
 pcall(function()
-    local {v_enc} = "{payload_hex}"
     local {v_key} = {dyn_key}
-    local {v_dec} = {{}}
-    local {v_code} = ""
-    for i = 1, #{v_enc} do
-        local b = {v_enc}:byte(i)
-        {v_dec}[i] = string.char(bit32.bxor(b, {v_key}))
+    local {v_data} = {{{bytes_csv}}}
+    local {v_t} = {{}}
+    for i = 1, #{v_data} do
+        {v_t}[i] = string.char(bit32.bxor({v_data}[i], {v_key}))
     end
-    -- 역순으로 정렬된 바이트 복원
-    for i = #{v_dec}, 1, -1 do
-        {v_code} = {v_code} .. {v_dec}[i]
+    local {v_arr} = {{}}
+    for i = #{v_t}, 1, -1 do
+        table.insert({v_arr}, {v_t}[i])
     end
-    local {v_func}, err = loadstring({v_code})
-    if {v_func} then
-        task.spawn({v_func})
+    local {v_final} = table.concat({v_arr})
+    local {v_fn}, err = loadstring({v_final})
+    if {v_fn} then
+        task.spawn({v_fn})
     else
         warn("[Luasafe Error] " .. tostring(err))
     end
