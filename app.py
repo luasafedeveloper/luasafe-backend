@@ -47,7 +47,7 @@ def domain_router(path):
   return render_template('user/index.html')
 
 
-# --- 스마트 로더 (UTF-8 바이트 안전 처리 + 롤링 키 난독화) ---
+# --- 스마트 로더 (안정적인 XOR 난독화 적용) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
   if request.method == 'GET':
@@ -131,26 +131,21 @@ end;"""
           ' script available!");'
       )
 
-    # 🔒 [UTF-8 바이트 기반 롤링 키 난독화] 한글/UI 깨짐 방지 & 고난도 보호
+    # 🔒 [안정적인 XOR 난독화] 덤프했을 때는 바이트 숫자 배열만 보이지만, 실행 시에는 100% 완벽하게 복호화되어 UI가 정상 뜸
     raw_lua = script.lua_code
-    raw_bytes = raw_lua.encode('utf-8')  # 한글 및 특수문자를 안전한 바이트로 변환
+    raw_bytes = raw_lua.encode('utf-8')
 
-    encoded_bytes = []
-    base_key = 0x5A
-    for i, b in enumerate(raw_bytes):
-      dynamic_key = (base_key + (i * 3)) % 256
-      encoded_bytes.append(b ^ dynamic_key)
-
+    xor_key = 0x5A
+    encoded_bytes = [b ^ xor_key for b in raw_bytes]
     payload_str = ','.join(map(str, encoded_bytes))
 
     return (
-        """-- [Luasafe Advanced Secure Execution]
+        """-- [Luasafe Secure Execution]
 pcall(function()
     local enc = {%s}
     local dec = {}
     for i = 1, #enc do
-        local dynamic_key = (90 + ((i - 1) * 3)) %% 256
-        dec[i] = string.char(enc[i] ~ dynamic_key)
+        dec[i] = string.char(enc[i] ~ 0x5A)
     end
     local code = table.concat(dec)
     local f, err = loadstring(code)
@@ -411,8 +406,8 @@ def admin_generate():
     amount = int(data.get('amount', 24))
 
     chars = string.ascii_uppercase + string.digits
-    random_print = ''.join(random.choices(chars, k=16))
-    key_str = f'luasafe-{random_print[:4]}-{random_print[4:8]}-{random_print[8:12]}'
+    random_part = ''.join(random.choices(chars, k=16))
+    key_str = f'luasafe-{random_part[:4]}-{random_part[4:8]}-{random_part[8:12]}'
 
     expires = (
         None
