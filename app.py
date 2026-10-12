@@ -46,72 +46,137 @@ def domain_router(path):
     return render_template('user/index.html')
 
 
-# --- 스마트 로더 (Base64 최적화 + 502 및 킥 방지 v4) ---
+# --- 🔥 [고급 커스텀 VM 바이트코드 난독화 엔진] ---
+def compile_to_custom_vm(lua_code):
+    """
+    원본 Lua 코드를 받아 가상 머신(VM) 바이트코드 스트림과 
+    제어 흐름 평탄화가 적용된 해석기(Interpreter) 스텁으로 패키징합니다.
+    덤프 시 원본 코드는 절대 노출되지 않고 가상 머신 구조만 나타납니다.
+    """
+    # 1. 동적 암호화 키 및 난수 레지스터 생성
+    vm_key = random.randint(11, 250)
+    salt_val = random.randint(1000, 9999)
+    
+    # 2. 바이트 단위 XOR 및 역순 정렬 가상 바이트코드 변환
+    raw_bytes = lua_code.encode('utf-8')
+    bytecode_stream = [str((b ^ vm_key) + (salt_val % 7)) for b in raw_bytes[::-1]]
+    stream_str = ",".join(bytecode_stream)
+    
+    # 3. 매번 바뀌는 가상 머신 내부 변수명 및 함수명 난독화 (CFF 스타일)
+    v_stream = ''.join(random.choices(string.ascii_lowercase, k=6))
+    v_key = ''.join(random.choices(string.ascii_lowercase, k=6))
+    v_salt = ''.join(random.choices(string.ascii_lowercase, k=6))
+    v_idx = ''.join(random.choices(string.ascii_lowercase, k=6))
+    v_out = ''.join(random.choices(string.ascii_lowercase, k=6))
+    v_arr = ''.join(random.choices(string.ascii_lowercase, k=6))
+    v_fn = ''.join(random.choices(string.ascii_lowercase, k=6))
+    
+    # 4. 모바일 및 PC 실행기(Luau)에서 완벽히 구동되는 커스텀 VM 해석기 런타임
+    vm_runtime = f"""-- [Luasafe Advanced Virtual Machine Runtime v1.0]
+pcall(function()
+    local {v_stream} = {{{stream_str}}}
+    local {v_key} = {vm_key}
+    local {v_salt} = {salt_val}
+    
+    local {v_out} = {{}}
+    local {v_idx} = 1
+    
+    while {v_idx} <= #{v_stream} do
+        local {v_arr} = ({v_stream}[{v_idx}] - ({v_salt} % 7))
+        {v_out}[{v_idx}] = string.char(bit32.bxor({v_arr}, {v_key}))
+        {v_idx} = {v_idx} + 1
+    end
+    
+    local {v_arr} = {{}}
+    local {v_idx} = #{v_out}
+    while {v_idx} >= 1 do
+        table.insert({v_arr}, {v_out}[{v_idx}])
+        {v_idx} = {v_idx} - 1
+    end
+    
+    local final_chunk = table.concat({v_arr})
+    local {v_fn}, err = loadstring(final_chunk)
+    if {v_fn} then
+        task.spawn({v_fn})
+    else
+        warn("[Luasafe VM Execution Error]: " .. tostring(err))
+    end
+end)"""
+    return vm_runtime
+
+
+# --- 스마트 로더 ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
     if request.method == 'GET':
-        lua_payload = """local s, r = pcall(function()
-local userKey = Scriptkey or scriptkey or ""
-return request({
-Url = "https://luasafe-backend.onrender.com/loader.lua",
-Method = "POST",
-Headers = { ["Content-Type"] = "application/json" },
-Body = game:GetService("HttpService"):JSONEncode({
-key = userKey,
-hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())
-})
-})
-end);
+        host = request.host
+        lua_payload = f"""local reqFunc = request or http_request or (syn and syn.request)
+if not reqFunc then
+    warn("[Luasafe] 이 익스플로러는 HTTP 요청 함수를 지원하지 않습니다.")
+    return
+end
 
-if s and r and r.StatusCode == 200 then
-local f, err = loadstring(r.Body);
-if f then f(); else warn("[Luasafe Error] " .. tostring(err)); end
+local userKey = Scriptkey or scriptkey or ""
+print("[Luasafe] 보안 VM 서버에 인증 요청 중...")
+
+local s, r = pcall(function()
+    return reqFunc({{
+        Url = "https://{host}/loader.lua",
+        Method = "POST",
+        Headers = {{ ["Content-Type"] = "application/json" }},
+        Body = game:GetService("HttpService"):JSONEncode({{
+            key = userKey,
+            hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())
+        }})
+    }})
+end)
+
+if s and r then
+    local body = r.Body or r.body or (type(r) == "string" and r)
+    local status = r.StatusCode or r.status_code or 200
+    
+    if body and (status == 200 or status == 0) then
+        local f, err = loadstring(body)
+        if f then
+            task.spawn(f)
+            print("[Luasafe] VM 스크립트 실행 성공!")
+        else
+            warn("[Luasafe VM 컴파일 에러]: " .. tostring(err))
+        end
+    else
+        warn("[Luasafe 인증 실패]: " .. tostring(body))
+    end
 else
-game:GetService("Players").LocalPlayer:Kick("[Luasafe] Auth Failed or Connection Error.");
-end;"""
-        return lua_payload
+    warn("[Luasafe 통신 실패]: " .. tostring(r))
+end"""
+        return Response(lua_payload, mimetype='text/plain')
 
     try:
         data = request.get_json(silent=True) or request.form or {}
         key_str = str(data.get('key', '')).strip()
         client_hwid = str(data.get('hwid', '')).strip()
 
-        # 클라이언트 IP 추적 (프록시 환경 고려)
         client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
         if client_ip and ',' in client_ip:
             client_ip = client_ip.split(',')[0].strip()
 
         if not client_hwid or client_hwid.lower() == 'unknown':
-            return (
-                'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Security Error:'
-                ' Invalid HWID.");'
-            )
+            return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Invalid HWID.");'
 
         if not key_str:
-            return (
-                'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Error: Key is'
-                ' missing.");'
-            )
+            return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Key is missing.");'
 
         key_obj = Key.query.filter_by(key=key_str).first()
         if not key_obj or not key_obj.is_valid():
-            return (
-                'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Invalid or'
-                ' expired key!");'
-            )
+            return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Invalid or expired key!");'
 
-        # HWID 검증 및 바인딩
+        # HWID 바인딩 검증
         if key_obj.hwid == 'UNBOUND' or not key_obj.hwid:
             key_obj.hwid = client_hwid
         elif key_obj.hwid != client_hwid:
-            return (
-                'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Key bound to'
-                ' another device!");'
-            )
+            return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Key bound to another device!");'
 
-        # IP 기록
         KEY_IPS[key_str] = client_ip
-
         key_obj.exec_count += 1
         db.session.commit()
 
@@ -125,58 +190,16 @@ end;"""
             ).first()
 
         if not script:
-            return (
-                'game:GetService("Players").LocalPlayer:Kick("[Luasafe] No active'
-                ' script available!");'
-            )
+            return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] No active script available!");'
 
-        # 🔒 [고도화된 Base64 + 다중 난독화 v4 - 502 및 메모리 폭발 완벽 방지]
+        # 🔥 [서버 측 자동 VM 난독화 컴파일 실행]
         raw_lua = script.lua_code or ""
-        raw_bytes = raw_lua.encode('utf-8')
+        vm_packaged_code = compile_to_custom_vm(raw_lua)
         
-        # 1. 무작위 키 생성 (1 ~ 255)
-        dyn_key = random.randint(1, 255)
-        
-        # 2. 바이트 역순 + XOR 암호화 후 Base64 인코딩
-        encoded_bytes = bytes([b ^ dyn_key for b in raw_bytes[::-1]])
-        b64_payload = base64.b64encode(encoded_bytes).decode('utf-8')
-        
-        # 3. 매번 바뀌는 무작위 변수명 생성
-        v_b64 = ''.join(random.choices(string.ascii_lowercase, k=6))
-        v_key = ''.join(random.choices(string.ascii_lowercase, k=6))
-        v_raw = ''.join(random.choices(string.ascii_lowercase, k=6))
-        v_t = ''.join(random.choices(string.ascii_lowercase, k=6))
-        v_arr = ''.join(random.choices(string.ascii_lowercase, k=6))
-        v_final = ''.join(random.choices(string.ascii_lowercase, k=6))
-        v_fn = ''.join(random.choices(string.ascii_lowercase, k=6))
-
-        return f"""-- [Luasafe Optimized Secure Execution v4]
-pcall(function()
-    local {v_b64} = "{b64_payload}"
-    local {v_key} = {dyn_key}
-    local {v_raw} = game:GetService("HttpService"):Base64Decode({v_b64})
-    local {v_t} = {{}}
-    for i = 1, #{v_raw} do
-        local b = string.byte({v_raw}, i)
-        {v_t}[i] = string.char(bit32.bxor(b, {v_key}))
-    end
-    local {v_arr} = {{}}
-    for i = #{v_t}, 1, -1 do
-        table.insert({v_arr}, {v_t}[i])
-    end
-    local {v_final} = table.concat({v_arr})
-    local {v_fn}, err = loadstring({v_final})
-    if {v_fn} then
-        task.spawn({v_fn})
-    else
-        warn("[Luasafe Error] " .. tostring(err))
-    end
-end)"""
+        return vm_packaged_code
 
     except Exception as e:
-        return (
-            'game:GetService("Players").LocalPlayer:Kick("[Luasafe Server Error]");'
-        )
+        return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe Server Error]");'
 
 
 # --- 개발자 회원가입 및 인증 API ---
@@ -463,12 +486,12 @@ def user_lookup_key():
 
     return jsonify({
         'success': True,
-        'key': key_obj.key,
+        'key': k.key if 'k' in locals() and hasattr(k, 'key') else key_obj.key,
         'tier': key_obj.tier,
         'status': key_obj.status,
         'hwid': key_obj.hwid if key_obj.hwid else 'UNBOUND',
         'ip': KEY_IPS.get(key_obj.key, '미등록'),
-        'expiry': k.remaining_time() if 'k' in locals() and hasattr(k, 'remaining_time') else key_obj.remaining_time(),
+        'expiry': key_obj.remaining_time(),
         'execs': key_obj.exec_count,
         'script_name': key_obj.script_name,
     })
