@@ -44,7 +44,7 @@ def domain_router(path):
   return render_template('user/index.html')
 
 
-# --- 스마트 로더 (정상 작동하는 원래 구조 유지 + 덤퍼 무력화 완벽 보안 적용) ---
+# --- 스마트 로더 (원본 구조 유지 + 덤프 방어 난독화 및 IP 수집 적용) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
   if request.method == 'GET':
@@ -68,66 +68,77 @@ else
 end;"""
     return lua_payload
 
-  data = request.get_json(silent=True) or request.form or {}
-  key_str = str(data.get('key', '')).strip()
-  client_hwid = str(data.get('hwid', '')).strip()
+  try:
+    data = request.get_json(silent=True) or request.form or {}
+    key_str = str(data.get('key', '')).strip()
+    client_hwid = str(data.get('hwid', '')).strip()
 
-  if not client_hwid or client_hwid.lower() == 'unknown':
+    # 클라이언트 IP 추적 (프록시 환경 고려)
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    if client_ip and ',' in client_ip:
+      client_ip = client_ip.split(',')[0].strip()
+
+    if not client_hwid or client_hwid.lower() == 'unknown':
+      return (
+          'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Security Error:'
+          ' Invalid HWID.");'
+      )
+
+    if not key_str:
+      return (
+          'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Error: Key is'
+          ' missing.");'
+      )
+
+    key_obj = Key.query.filter_by(key=key_str).first()
+    if not key_obj or not key_obj.is_valid():
+      return (
+          'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Invalid or'
+          ' expired key!");'
+      )
+
+    if key_obj.hwid == 'UNBOUND' or not key_obj.hwid:
+      key_obj.hwid = client_hwid
+    elif key_obj.hwid != client_hwid:
+      return (
+          'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Key bound to'
+          ' another device!");'
+      )
+
+    # 💡 키 객체에 IP 정보 저장 (DB 모델에 ip 컬럼이 없거나 에러날 경우를 대비해 예외처리 혹은 속성 확인)
+    try:
+      key_obj.ip = client_ip
+    except:
+      pass
+
+    key_obj.exec_count += 1
+    db.session.commit()
+
+    target_script_name = key_obj.script_name
+    script = Script.query.filter_by(
+        owner_id=key_obj.owner_id, name=target_script_name, active=True
+    ).first()
+    if not script:
+      script = Script.query.filter_by(
+          owner_id=key_obj.owner_id, active=True
+      ).first()
+
+    if not script:
+      return (
+          'game:GetService("Players").LocalPlayer:Kick("[Luasafe] No active'
+          ' script available!");'
+      )
+
+    # 🔒 [덤퍼 차단 난독화] 원본 코드를 바이트 단위로 암호화하여 전송
+    raw_lua = script.lua_code
+    byte_list = [ord(c) for c in raw_lua]
+    encoded_bytes = [
+        ((b * 5 + 23) % 256) ^ 0x65 for b in byte_list
+    ]
+    payload_str = ','.join(map(str, encoded_bytes))
+
     return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Security Error:'
-        ' Invalid HWID.");'
-    )
-
-  if not key_str:
-    return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Error: Key is'
-        ' missing.");'
-    )
-
-  key_obj = Key.query.filter_by(key=key_str).first()
-  if not key_obj or not key_obj.is_valid():
-    return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Invalid or'
-        ' expired key!");'
-    )
-
-  if key_obj.hwid == 'UNBOUND' or not key_obj.hwid:
-    key_obj.hwid = client_hwid
-  elif key_obj.hwid != client_hwid:
-    return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Key bound to'
-        ' another device!");'
-    )
-
-  key_obj.exec_count += 1
-  db.session.commit()
-
-  target_script_name = key_obj.script_name
-  script = Script.query.filter_by(
-      owner_id=key_obj.owner_id, name=target_script_name, active=True
-  ).first()
-  if not script:
-    script = Script.query.filter_by(owner_id=key_obj.owner_id, active=True).first()
-
-  if not script:
-    return (
-        'game:GetService("Players").LocalPlayer:Kick("[Luasafe] No active'
-        ' script available!");'
-    )
-
-  # 🔒 [핵심 보안 적용] 덤퍼가 원본 코드를 보지 못하게 바이트 단위로 난독화하여 전송
-  raw_lua = script.lua_code
-  byte_list = [ord(c) for c in raw_lua]
-
-  # 각 문자에 고유 연산을 적용하여 평문이 절대 노출되지 않도록 함
-  encoded_bytes = [
-      ((b * 5 + 23) % 256) ^ 0x65 for b in byte_list
-  ]
-  payload_str = ','.join(map(str, encoded_bytes))
-
-  # 클라이언트 메모리(실행기) 안에서만 안전하게 복호화되어 실행되는 가상화 래퍼
-  return (
-      """-- [Luasafe Secure Protection Core]
+        """-- [Luasafe Secure Execution]
 pcall(function()
     local p = {%s}
     local r = {}
@@ -146,11 +157,16 @@ pcall(function()
     if f then
         task.spawn(f)
     else
-        warn("[Luasafe Protection Error] " .. tostring(e))
+        warn("[Luasafe Error] " .. tostring(e))
     end
 end)"""
-      % payload_str
-  )
+        % payload_str
+    )
+
+  except Exception as e:
+    return (
+        'game:GetService("Players").LocalPlayer:Kick("[Luasafe Server Error]");'
+    )
 
 
 # --- 개발자 회원가입 및 인증 API ---
@@ -334,6 +350,7 @@ def admin_keys():
       'tier': k.tier,
       'status': k.status,
       'hwid': k.hwid,
+      'ip': getattr(k, 'ip', '지정 안됨'),  # IP 정보 추가 전송
       'expiry': k.remaining_time(),
       'execs': k.exec_count,
       'script_name': k.script_name,
