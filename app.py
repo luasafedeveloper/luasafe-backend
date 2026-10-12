@@ -47,7 +47,7 @@ def domain_router(path):
   return render_template('user/index.html')
 
 
-# --- 스마트 로더 (안정적인 XOR 난독화 적용) ---
+# --- 스마트 로더 (XOR 바이트 난독화 + IP 수집 적용) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
   if request.method == 'GET':
@@ -131,19 +131,17 @@ end;"""
           ' script available!");'
       )
 
-    # 🔒 [안정적인 XOR 난독화] 덤프했을 때는 바이트 숫자 배열만 보이지만, 실행 시에는 100% 완벽하게 복호화되어 UI가 정상 뜸
+    # 🔒 [안전한 XOR 바이트 난독화] 덤프 방어 + UI/한글 깨짐 방지
     raw_lua = script.lua_code
     raw_bytes = raw_lua.encode('utf-8')
-
     xor_key = 0x5A
     encoded_bytes = [b ^ xor_key for b in raw_bytes]
     payload_str = ','.join(map(str, encoded_bytes))
 
-    return (
-        """-- [Luasafe Secure Execution]
+    return f"""-- [Luasafe Secure Execution]
 pcall(function()
-    local enc = {%s}
-    local dec = {}
+    local enc = {{{payload_str}}}
+    local dec = {{}}
     for i = 1, #enc do
         dec[i] = string.char(enc[i] ~ 0x5A)
     end
@@ -155,8 +153,6 @@ pcall(function()
         warn("[Luasafe Error] " .. tostring(err))
     end
 end)"""
-        % payload_str
-    )
 
   except Exception as e:
     return (
