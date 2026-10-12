@@ -1,8 +1,11 @@
 from datetime import datetime, timedelta
 import base64
 import functools
+import os
 import random
+import subprocess
 import string
+import tempfile
 from config import Config
 from flask import Flask, jsonify, render_template, request, session
 from models import Blacklist, InviteCode, Key, Script, Setting, User, db
@@ -47,77 +50,48 @@ def domain_router(path):
     return render_template('user/index.html')
 
 
-# --- 🔥 [최고급 헤비 보안 난독화 및 안티 후킹 엔진 v5.0] ---
+# --- 🔥 [Prometheus VM 연동형 서버사이드 난독화 엔진] ---
 def compile_to_heavy_vm(lua_code):
     """
-    친구분이 지적한 취약점(고정 키, 노출된 배열, 후킹)을 완벽히 방어하는 
-    서버사이드 최고급 패키징 엔진
+    서버에 설치된 Prometheus Luau Obfuscator CLI를 subprocess로 호출하여
+    실제 VM 바이트코드 및 제어 흐름 평탄화가 적용된 난독화 코드를 생성합니다.
     """
-    # 1. 매 요청마다 완전히 무작위로 바뀌는 동적 세션 키 생성
-    k1 = random.randint(40, 220)
-    k2 = random.randint(15, 95)
-    
-    # 2. 바이트 변환 및 인덱스 기반 다중 시프트 암호화
-    raw_bytes = lua_code.encode('utf-8')
-    transformed = []
-    for i, b in enumerate(raw_bytes):
-        val = ((b ^ k1) + (i % 7) + k2) % 256
-        transformed.append(val)
-    
-    # 3. 단순 숫자 배열 노출을 막기 위해 Base64 문자열 스트림으로 압축 포장
-    b64_encoded = base64.b64encode(bytes(transformed)).decode('utf-8')
-    
-    # 4. 덤프 분석을 방해하기 위한 무작위 변수명 스크램블
-    v_b64 = ''.join(random.choices(string.ascii_lowercase, k=6))
-    v_k1 = ''.join(random.choices(string.ascii_lowercase, k=6))
-    v_k2 = ''.join(random.choices(string.ascii_lowercase, k=6))
-    v_out = ''.join(random.choices(string.ascii_lowercase, k=6))
-    v_fn = ''.join(random.choices(string.ascii_lowercase, k=6))
-    v_err = ''.join(random.choices(string.ascii_lowercase, k=6))
+    # 1. 원본 Lua 코드를 임시 입력 파일로 저장
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.lua', delete=False, encoding='utf-8') as f:
+        f.write(lua_code)
+        input_path = f.name
 
-    # 5. 클라이언트 런타임 (Base64 디코더 내장 + 안티 후킹 검사 구조)
-    heavy_runtime = f"""-- [Luasafe Maximum Security & Anti-Hook Runtime v5.0]
-pcall(function()
-    local {v_b64} = "{b64_encoded}"
-    local {v_k1} = {k1}
-    local {v_k2} = {k2}
-    
-    -- 내장 Base64 디코더 (순수 Luau 구현으로 외부 의존성 제거)
-    local b = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
-    local function decode(data)
-        data = string.gsub(data, '[^'..b..'=]', '')
-        return (data:gsub('.', function(x)
-            if (x == '=') then return '' end
-            local r,f='',(b:find(x)-1)
-            for i=6,1,-1 do r=r..(f%2^i-f%2^(i-1)>0 and '1' or '0') end
-            return r;
-        end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x)
-            if (#x ~= 8) then return '' end
-            local c=0
-            for i=1,8 do c=c+(x:sub(i,i)=='1' and 2^(8-i) or 0) end
-            return string.char(c)
-        end))
-    end
-    
-    local raw_str = decode({v_b64})
-    local {v_out} = {{}}
-    
-    for i = 1, #raw_str do
-        local byte_val = raw_str:byte(i)
-        local tmp = (byte_val - {v_k2} - ((i - 1) % 7)) % 256
-        if tmp < 0 then tmp = tmp + 256 end
-        {v_out}[i] = string.char(bit32.bxor(tmp, {v_k1}))
-    end
-    
-    local final_code = table.concat({v_out})
-    local {v_fn}, {v_err} = loadstring(final_code)
-    if {v_fn} then
-        task.spawn({v_fn})
-    else
-        warn("[Luasafe Execution Error]: " .. tostring({v_err}))
-    end
+    output_path = input_path + ".obfuscated.lua"
+
+    try:
+        # 2. Prometheus CLI 실행 (Strong 프리셋 적용)
+        # 주의: Render 서버 환경(또는 Dockerfile)에 lua 및 Prometheus 폴더가 세팅되어 있어야 합니다.
+        cmd = ["lua", "Prometheus/cli.lua", "--preset", "Strong", "--nocolors", input_path, "-o", output_path]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        
+        if result.returncode == 0 and os.path.exists(output_path):
+            with open(output_path, 'r', encoding='utf-8') as f:
+                obfuscated_code = f.read()
+            
+            # 클라이언트(로블록스 익스플로잇)에서 바로 pcall로 감싸서 실행 가능하도록 반환
+            final_payload = f"""pcall(function()
+    {obfuscated_code}
 end)"""
-    return heavy_runtime
+            return final_payload
+        else:
+            print(f"[Prometheus Compile Error]: {result.stderr}")
+            return "warn('[Luasafe VM Error]: Prometheus compilation failed.');"
+            
+    except Exception as e:
+        print(f"[Subprocess Exception]: {str(e)}")
+        return f"warn('[Luasafe VM Exception]: {str(e)}');"
+        
+    finally:
+        # 임시 파일 안전하게 정리
+        if os.path.exists(input_path):
+            os.remove(input_path)
+        if os.path.exists(output_path):
+            os.remove(output_path)
 
 
 # --- 스마트 로더 ---
@@ -187,11 +161,11 @@ end;"""
         if not script:
             return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] No active script available!");'
 
-        # 🔥 [서버 측 최고급 헤비 난독화 컴파일러 실행]
+        # 🔥 [Prometheus VM 난독화 컴파일러 실행]
         raw_lua = script.lua_code or ""
-        heavy_packaged_code = compile_to_heavy_vm(raw_lua)
+        vm_packaged_code = compile_to_heavy_vm(raw_lua)
         
-        return heavy_packaged_code
+        return vm_packaged_code
 
     except Exception as e:
         return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe Server Error]");'
