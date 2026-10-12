@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import base64
 import functools
 import os
 import random
@@ -45,7 +46,7 @@ def domain_router(path):
     return render_template('user/index.html')
 
 
-# --- 스마트 로더 (안정적인 바이트 배열 다중 난독화 + 무작위 변수명) ---
+# --- 스마트 로더 (Base64 최적화 + 502 및 킥 방지 v4) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
     if request.method == 'GET':
@@ -129,32 +130,35 @@ end;"""
                 ' script available!");'
             )
 
-        # 🔒 [안전하고 강력한 바이트 배열 난독화 v3]
+        # 🔒 [고도화된 Base64 + 다중 난독화 v4 - 502 및 메모리 폭발 완벽 방지]
         raw_lua = script.lua_code or ""
         raw_bytes = raw_lua.encode('utf-8')
         
         # 1. 무작위 키 생성 (1 ~ 255)
         dyn_key = random.randint(1, 255)
         
-        # 2. 바이트 역순 + XOR 암호화 후 숫자 CSV 배열로 변환
-        encoded_bytes = [b ^ dyn_key for b in raw_bytes[::-1]]
-        bytes_csv = ",".join(map(str, encoded_bytes))
+        # 2. 바이트 역순 + XOR 암호화 후 Base64 인코딩
+        encoded_bytes = bytes([b ^ dyn_key for b in raw_bytes[::-1]])
+        b64_payload = base64.b64encode(encoded_bytes).decode('utf-8')
         
         # 3. 매번 바뀌는 무작위 변수명 생성
-        v_data = ''.join(random.choices(string.ascii_lowercase, k=6))
+        v_b64 = ''.join(random.choices(string.ascii_lowercase, k=6))
         v_key = ''.join(random.choices(string.ascii_lowercase, k=6))
+        v_raw = ''.join(random.choices(string.ascii_lowercase, k=6))
         v_t = ''.join(random.choices(string.ascii_lowercase, k=6))
         v_arr = ''.join(random.choices(string.ascii_lowercase, k=6))
         v_final = ''.join(random.choices(string.ascii_lowercase, k=6))
         v_fn = ''.join(random.choices(string.ascii_lowercase, k=6))
 
-        return f"""-- [Luasafe Stable Secure Execution v3]
+        return f"""-- [Luasafe Optimized Secure Execution v4]
 pcall(function()
+    local {v_b64} = "{b64_payload}"
     local {v_key} = {dyn_key}
-    local {v_data} = {{{bytes_csv}}}
+    local {v_raw} = game:GetService("HttpService"):Base64Decode({v_b64})
     local {v_t} = {{}}
-    for i = 1, #{v_data} do
-        {v_t}[i] = string.char(bit32.bxor({v_data}[i], {v_key}))
+    for i = 1, #{v_raw} do
+        local b = string.byte({v_raw}, i)
+        {v_t}[i] = string.char(bit32.bxor(b, {v_key}))
     end
     local {v_arr} = {{}}
     for i = #{v_t}, 1, -1 do
@@ -464,7 +468,7 @@ def user_lookup_key():
         'status': key_obj.status,
         'hwid': key_obj.hwid if key_obj.hwid else 'UNBOUND',
         'ip': KEY_IPS.get(key_obj.key, '미등록'),
-        'expiry': key_obj.remaining_time(),
+        'expiry': k.remaining_time() if 'k' in locals() and hasattr(k, 'remaining_time') else key_obj.remaining_time(),
         'execs': key_obj.exec_count,
         'script_name': key_obj.script_name,
     })
