@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import functools
+import os
 import random
 import string
 from config import Config
@@ -471,4 +472,5 @@ def user_lookup_key():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
