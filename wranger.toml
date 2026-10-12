@@ -1,0 +1,4 @@
+name = "luasafe-backend"
+main = "app.py"
+compatibility_date = "2026-10-12"
+compatibility_flags = ["python_workers"]
