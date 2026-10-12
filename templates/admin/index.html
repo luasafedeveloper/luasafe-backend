@@ -112,7 +112,6 @@
 <script>
     let isRegisterMode = false;
 
-    // 페이지 접속 시 세션 상태 확인
     async function checkSession() {
         try {
             let res = await fetch('/api/admin/check_session');
@@ -164,7 +163,7 @@
             let data = await res.json();
             alert(data.message);
             if (data.success) {
-                toggleAuthMode(); // 로그인 모드로 전환
+                toggleAuthMode();
             }
         } else {
             let res = await fetch('/api/admin/login', {
@@ -210,9 +209,11 @@
 
         let kRes = await fetch('/api/admin/keys');
         let kData = await kRes.json();
-        let kHtml = "<table><tr><th>키</th><th>스크립트</th><th>만료시간</th><th>HWID</th><th>실행</th><th>관리</th></tr>";
+        let kHtml = "<table><tr><th>키</th><th>스크립트</th><th>만료시간</th><th>HWID / IP</th><th>실행</th><th>관리</th></tr>";
         kData.forEach(k => {
-            kHtml += `<tr><td>${k.key}</td><td>${k.script_name || '-'}</td><td>${k.expiry}</td><td>${k.hwid}</td><td>${k.execs}</td><td><button class="btn-danger" onclick="deleteKey(${k.id})">삭제</button> <button class="btn-primary" onclick="resetHwid(${k.id})">HWID초기화</button></td></tr>`;
+            // HWID 옆에 IP가 깔끔하게 노출되도록 렌더링 수정
+            let ipDisplay = (k.ip && k.ip !== '지정 안됨') ? `<br><small style="color: #a1a1aa;">IP: ${k.ip}</small>` : '';
+            kHtml += `<tr><td>${k.key}</td><td>${k.script_name || '-'}</td><td>${k.expiry}</td><td>${k.hwid}${ipDisplay}</td><td>${k.execs}</td><td><button class="btn-danger" onclick="deleteKey(${k.id})">삭제</button> <button class="btn-primary" onclick="resetHwid(${k.id})">HWID초기화</button></td></tr>`;
         });
         kHtml += "</table>";
         document.getElementById('keyList').innerHTML = kHtml;
@@ -298,7 +299,6 @@
         checkSession();
     }
 
-    // 최초 실행 시 세션 검사
     checkSession();
 </script>
 
