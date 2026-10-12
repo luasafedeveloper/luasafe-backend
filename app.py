@@ -44,7 +44,7 @@ def domain_router(path):
   return render_template('user/index.html')
 
 
-# --- 스마트 로더 (원본 구조 유지 + 덤프 방어 난독화 및 IP 수집 적용) ---
+# --- 스마트 로더 (HWID 및 IP 수집 및 검증 적용) ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
   if request.method == 'GET':
@@ -97,6 +97,7 @@ end;"""
           ' expired key!");'
       )
 
+    # HWID 검증 및 바인딩
     if key_obj.hwid == 'UNBOUND' or not key_obj.hwid:
       key_obj.hwid = client_hwid
     elif key_obj.hwid != client_hwid:
@@ -105,10 +106,10 @@ end;"""
           ' another device!");'
       )
 
-    # 💡 키 객체에 IP 정보 저장 (DB 모델에 ip 컬럼이 없거나 에러날 경우를 대비해 예외처리 혹은 속성 확인)
+    # 💡 IP 정보 저장 및 독립 관리 처리
     try:
       key_obj.ip = client_ip
-    except:
+    except Exception:
       pass
 
     key_obj.exec_count += 1
@@ -349,8 +350,8 @@ def admin_keys():
       'key': k.key,
       'tier': k.tier,
       'status': k.status,
-      'hwid': k.hwid,
-      'ip': getattr(k, 'ip', '지정 안됨'),  # IP 정보 추가 전송
+      'hwid': k.hwid if k.hwid else 'UNBOUND',
+      'ip': getattr(k, 'ip', '미등록') if getattr(k, 'ip', None) else '미등록',  # 독립된 IP 필드 전송
       'expiry': k.remaining_time(),
       'execs': k.exec_count,
       'script_name': k.script_name,
@@ -383,6 +384,24 @@ def admin_reset_hwid():
   key_obj.hwid = 'UNBOUND'
   db.session.commit()
   return jsonify({'success': True, 'message': 'HWID가 초기화되었습니다.'})
+
+
+# --- 개발자 전용 IP 초기화 API ---
+@app.route('/api/admin/keys/reset_ip', methods=['POST'])
+@login_required
+def admin_reset_ip():
+  user_id = session.get('user_id')
+  data = request.get_json() or {}
+  key_obj = Key.query.filter_by(id=data.get('id'), owner_id=user_id).first()
+  if not key_obj:
+    return jsonify({'success': False, 'message': '키를 찾을 수 없거나 권한이 없습니다.'}), 403
+
+  try:
+    key_obj.ip = '미등록'
+  except Exception:
+    pass
+  db.session.commit()
+  return jsonify({'success': True, 'message': 'IP가 초기화되었습니다.'})
 
 
 @app.route('/api/admin/generate', methods=['POST'])
@@ -443,6 +462,7 @@ def user_lookup_key():
       'tier': key_obj.tier,
       'status': key_obj.status,
       'hwid': key_obj.hwid if key_obj.hwid else 'UNBOUND',
+      'ip': getattr(key_obj, 'ip', '미등록'),
       'expiry': key_obj.remaining_time(),
       'execs': key_obj.exec_count,
       'script_name': key_obj.script_name,
