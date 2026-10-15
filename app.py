@@ -1,9 +1,12 @@
 from datetime import datetime, timedelta
 import base64
 import functools
+import hashlib
+import hmac
 import os
 import random
 import string
+from typing import Dict
 from config import Config
 from flask import Flask, jsonify, render_template, request, session
 from models import Blacklist, InviteCode, Key, Script, Setting, User, db
@@ -13,11 +16,62 @@ app = Flask(__name__)
 app.config.from_object(Config)
 db.init_app(app)
 
-# 서버 메모리 기반 IP 저장소
+# 서버 메모리 기반 IP 저장소 및 보안 설정
 KEY_IPS = {}
+SHARED_SECRET_KEY = b"your_super_secret_app_key_998877"  # 클라이언트와 공유할 비밀키 (원하시는 값으로 변경 가능)
+REQUEST_TIMEOUT_SECONDS = 10
+USED_NONCES: Dict[str, float] = {}
 
 with app.app_context():
     db.create_all()
+
+
+def cleanup_expired_nonces():
+    """만료된 Nonce를 메모리에서 정리"""
+    current_time = time.time()
+    expired_keys = [
+        nonce for nonce, ts in USED_NONCES.items()
+        if current_time - ts > REQUEST_TIMEOUT_SECONDS
+    ]
+    for nonce in expired_keys:
+        del USED_NONCES[nonce]
+
+
+def verify_flask_hmac_and_nonce(body: bytes) -> bool:
+    """Flask 요청 헤더에서 HMAC 서명, Timestamp, Nonce를 검증하여 Replay Attack 차단"""
+    cleanup_expired_nonces()
+    
+    timestamp = request.headers.get('X-Timestamp', '')
+    nonce = request.headers.get('X-Nonce', '')
+    client_signature = request.headers.get('X-Signature', '')
+
+    if not timestamp or not nonce or not client_signature:
+        return False
+
+    # 1. Timestamp 유효성 체크 (10초 초과 요청 차단)
+    try:
+        req_time = float(timestamp)
+        if abs(time.time() - req_time) > REQUEST_TIMEOUT_SECONDS:
+            return False
+    except ValueError:
+        return False
+
+    # 2. Nonce 중복 사용 체크 (재전송 공격 방어)
+    if nonce in USED_NONCES:
+        return False
+
+    # 3. HMAC-SHA256 서명 검증
+    message = f"{timestamp}.{nonce}.".encode('utf-8') + body
+    expected_signature = hmac.new(
+        SHARED_SECRET_KEY, message, hashlib.sha256
+    ).hexdigest()
+
+    if not hmac.compare_digest(expected_signature, client_signature):
+        return False
+
+    # 사용된 Nonce 기록
+    USED_NONCES[nonce] = req_time
+    return True
 
 
 def login_required(f):
@@ -50,25 +104,17 @@ def domain_router(path):
 
 # --- 🔥 [순수 Python 기반 고성능 VM 난독화 및 바이트코드 가상화 엔진] ---
 def compile_to_heavy_vm(lua_code):
-    """
-    외부 Lua 바이너리 없이 Python 단독으로 원본 Lua 코드를 
-    고급 가상 바이트코드 스트림과 오피코드 매핑 구조로 완벽히 가상화합니다.
-    """
-    # 1. 매 빌드마다 무작위로 변하는 동적 난독화 키 생성
     xor_key = random.randint(50, 200)
     shift_val = random.randint(3, 15)
     
-    # 2. 바이트 변환 및 인덱스 기반 다중 시프트 암호화
     raw_bytes = lua_code.encode('utf-8')
     bytecode_stream = []
     for idx, b in enumerate(raw_bytes):
         transformed = ((b ^ xor_key) + (idx % shift_val)) % 256
         bytecode_stream.append(transformed)
     
-    # 3. Base64 바이트 스트림 압축
     b64_stream = base64.b64encode(bytes(bytecode_stream)).decode('utf-8')
     
-    # 4. 덤프 분석 방해를 위한 무작위 변수명 스크램블
     v_stream = ''.join(random.choices(string.ascii_lowercase, k=6))
     v_xk = ''.join(random.choices(string.ascii_lowercase, k=6))
     v_sv = ''.join(random.choices(string.ascii_lowercase, k=6))
@@ -76,14 +122,12 @@ def compile_to_heavy_vm(lua_code):
     v_fn = ''.join(random.choices(string.ascii_lowercase, k=6))
     v_err = ''.join(random.choices(string.ascii_lowercase, k=6))
 
-    # 5. 가상 머신(VM) 인터프리터 런타임 템플릿
     heavy_vm_runtime = f"""-- [[ Luasafe Advanced VM Obfuscator & Virtual Machine Runtime ]]
 pcall(function()
     local {v_stream} = "{b64_stream}"
     local {v_xk} = {xor_key}
     local {v_sv} = {shift_val}
     
-    -- 내장 순수 Luau Base64 디코더
     local b = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
     local function __dec(data)
         data = string.gsub(data, '[^'..b..'=]', '')
@@ -103,7 +147,6 @@ pcall(function()
     local decoded_raw = __dec({v_stream})
     local {v_vm} = {{}}
     
-    -- 가상 머신 레지스터 및 바이트코드 디인터리빙 루프
     for i = 1, #decoded_raw do
         local byte_val = decoded_raw:byte(i)
         local restored = (byte_val - ((i - 1) % {v_sv})) % 256
@@ -124,20 +167,41 @@ end)"""
     return heavy_vm_runtime
 
 
-# --- 스마트 로더 ---
+# --- 보안 스마트 로더 ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
     if request.method == 'GET':
+        # [클라이언트 로더 스크립트] - HMAC 서명 및 Nonce를 동적으로 생성하여 전송하도록 업그레이드
         lua_payload = """local s, r = pcall(function()
 local userKey = Scriptkey or scriptkey or ""
+local hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())
+local payloadTable = { key = userKey, hwid = hwid }
+local payloadJson = game:GetService("HttpService"):JSONEncode(payloadTable)
+
+local timestamp = tostring(os.time())
+local nonce = ""
+for i = 1, 16 do
+    nonce = nonce .. string.format("%02x", math.random(0, 255))
+end
+
+local message = timestamp .. "." .. nonce .. "." .. payloadJson
+local signature = ""
+if crypt and crypt.hmac then
+    signature = crypt.hmac(message, "your_super_secret_app_key_998877", "sha256")
+else
+    return nil
+end
+
 return request({
-Url = "https://luasafe-backend.onrender.com/loader.lua",
-Method = "POST",
-Headers = { ["Content-Type"] = "application/json" },
-Body = game:GetService("HttpService"):JSONEncode({
-key = userKey,
-hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())
-})
+    Url = "https://luasafe-backend.onrender.com/loader.lua",
+    Method = "POST",
+    Headers = {
+        ["Content-Type"] = "application/json",
+        ["X-Timestamp"] = timestamp,
+        ["X-Nonce"] = nonce,
+        ["X-Signature"] = signature
+    },
+    Body = payloadJson
 })
 end);
 
@@ -145,16 +209,20 @@ if s and r and r.StatusCode == 200 then
 local f, err = loadstring(r.Body);
 if f then f(); else warn("[Luasafe Error] " .. tostring(err)); end
 else
-game:GetService("Players").LocalPlayer:Kick("[Luasafe] Auth Failed or Connection Error.");
+game:GetService("Players").LocalPlayer:Kick("[Luasafe] Security Auth Failed or Invalid Signature.");
 end;"""
         return lua_payload
 
+    # POST 요청 처리 (HMAC 서명 검증 추가)
     try:
-        data = request.get_json(silent=True) or request.form or {}
+        body_bytes = request.get_data()
+        if not verify_flask_hmac_and_nonce(body_bytes):
+            return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Security Error: Invalid Signature or Expired Request.");', 401
+
+        data = request.get_json(silent=True) or {}
         key_str = str(data.get('key', '')).strip()
         client_hwid = str(data.get('hwid', '')).strip()
 
-        # 클라이언트 IP 추적
         client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
         if client_ip and ',' in client_ip:
             client_ip = client_ip.split(',')[0].strip()
@@ -169,7 +237,6 @@ end;"""
         if not key_obj or not key_obj.is_valid():
             return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Invalid or expired key!");'
 
-        # HWID 검증 및 바인딩
         if key_obj.hwid == 'UNBOUND' or not key_obj.hwid:
             key_obj.hwid = client_hwid
         elif key_obj.hwid != client_hwid:
@@ -191,7 +258,6 @@ end;"""
         if not script:
             return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] No active script available!");'
 
-        # 🔥 [Python 기반 고성능 VM 난독화 컴파일러 실행]
         raw_lua = script.lua_code or ""
         vm_packaged_code = compile_to_heavy_vm(raw_lua)
         
@@ -491,7 +557,7 @@ def user_lookup_key():
         'hwid': key_obj.hwid if key_obj.hwid else 'UNBOUND',
         'ip': KEY_IPS.get(key_obj.key, '미등록'),
         'expiry': key_obj.remaining_time(),
-        'execs': k.exec_count if 'k' in locals() and hasattr(k, 'exec_count') else 1,
+        'execs': key_obj.exec_count,
         'script_name': key_obj.script_name,
     })
 
