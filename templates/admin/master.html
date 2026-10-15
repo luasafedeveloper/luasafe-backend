@@ -1,111 +1,113 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>License Portal</title>
-<style>
-body { background-color: #0f0f12; color: #e1e1e6; font-family: sans-serif; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-.container { width: 100%; max-width: 450px; }
-.card { background: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 25px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
-h2 { text-align: center; margin-top: 0; color: #ffffff; }
-input { width: 100%; padding: 12px; margin: 8px 0; background: #27272a; border: 1px solid #3f3f46; border-radius: 6px; color: #fff; box-sizing: border-box; }
-button { width: 100%; padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; }
-.btn-primary { background: #6366f1; color: white; margin-top: 10px; }
-.btn-success { background: #10b981; color: white; margin-top: 10px; }
-.btn-danger { background: #ef4444; color: white; width: auto; padding: 6px 12px; font-size: 12px; }
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-th, td { padding: 10px; border-bottom: 1px solid #27272a; text-align: left; font-size: 14px; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>License Portal</title>
+    <style>
+        body { background-color: #0f0f12; color: #e1e1e6; font-family: sans-serif; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .container { width: 100%; max-width: 450px; }
+        .card { background: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 25px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+        h2 { text-align: center; margin-top: 0; color: #ffffff; }
+        input { width: 100%; padding: 12px; margin: 8px 0; background: #27272a; border: 1px solid #3f3f46; border-radius: 6px; color: #fff; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; }
+        .btn-primary { background: #6366f1; color: white; margin-top: 10px; }
+        .btn-success { background: #10b981; color: white; margin-top: 10px; }
+        .btn-danger { background: #ef4444; color: white; width: auto; padding: 6px 12px; font-size: 12px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 10px; border-bottom: 1px solid #27272a; text-align: left; font-size: 14px; }
+    </style>
 </head>
 <body>
 
 <div class="container">
-<!-- 로그인 화면 (접속 시 무조건 먼저 나옴) -->
-<div id="loginCard" class="card" style="display: none;">
-<h2>로그인</h2>
-<input type="text" id="adminUser" placeholder="아이디">
-<input type="password" id="adminPass" placeholder="비밀번호">
-<button class="btn-primary" onclick="login()">로그인</button>
-</div>
+    <!-- 로그인 화면 (접속 시 무조건 먼저 나옴) -->
+    <div id="loginCard" class="card" style="display: none;">
+        <h2>로그인</h2>
+        <input type="text" id="adminUser" placeholder="아이디">
+        <input type="password" id="adminPass" placeholder="비밀번호">
+        <button class="btn-primary" onclick="login()">로그인</button>
+    </div>
 
-<!-- 로그인 성공 시에만 보이는 라이센스 발급 화면 -->
-<div id="dashboardCard" class="card" style="display: none;">
-<div class="header">
-<h2>라이센스 발급</h2>
-<button class="btn-danger" onclick="logout()">로그아웃</button>
-</div>
-<button class="btn-success" onclick="generateInvite()">새 라이센스 코드 생성</button>
-
-<table>
-<thead><tr><th>라이센스 코드</th><th>상태</th></tr></thead>
-<tbody id="inviteTable"></tbody>
-</table>
-</div>
+    <!-- 로그인 성공 시에만 보이는 라이센스 발급 화면 -->
+    <div id="dashboardCard" class="card" style="display: none;">
+        <div class="header">
+            <h2>라이센스 발급</h2>
+            <button class="btn-danger" onclick="logout()">로그아웃</button>
+        </div>
+        <button class="btn-success" onclick="generateInvite()">새 라이센스 코드 생성</button>
+        
+        <table>
+            <thead><tr><th>라이센스 코드</th><th>상태</th></tr></thead>
+            <tbody id="inviteTable"></tbody>
+        </table>
+    </div>
 </div>
 
 <script>
-window.onload = async function() {
-let res = await fetch('/api/secret/check_session');
-let data = await res.json();
-if (data.logged_in) {
-showDashboard();
-} else {
-document.getElementById('loginCard').style.display = 'block';
-}
-};
+    window.onload = async function() {
+        let res = await fetch('/api/secret/check_session');
+        let data = await res.json();
+        if (data.logged_in) {
+            showDashboard();
+        } else {
+            document.getElementById('loginCard').style.display = 'block';
+        }
+    };
 
-async function login() {
-let u = document.getElementById('adminUser').value.trim();
-let p = document.getElementById('adminPass').value.trim();
+    async function login() {
+        let u = document.getElementById('adminUser').value.trim();
+        let p = document.getElementById('adminPass').value.trim();
 
-let res = await fetch('/api/secret/login', {
-method: 'POST',
-headers: {'Content-Type': 'application/json'},
-body: JSON.stringify({username: u, password: p})
-});
-let data = await res.json();
-if (data.success) {
-showDashboard();
-} else {
-alert(data.message);
-}
-}
+        let res = await fetch('/api/secret/login', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({username: u, password: p})
+        });
+        let data = await res.json();
+        if (data.success) {
+            showDashboard();
+        } else {
+            alert(data.message);
+        }
+    }
 
-async function logout() {
-await fetch('/api/secret/logout', {method: 'POST'});
-location.reload();
-}
+    async function logout() {
+        await fetch('/api/secret/logout', {method: 'POST'});
+        location.reload();
+    }
 
-function showDashboard() {
-document.getElementById('loginCard').style.display = 'none';
-document.getElementById('dashboardCard').style.display = 'block';
-loadInvites();
-}
+    function showDashboard() {
+        document.getElementById('loginCard').style.display = 'none';
+        document.getElementById('dashboardCard').style.display = 'block';
+        loadInvites();
+    }
 
-async function generateInvite() {
-let res = await fetch('/api/secret/invite/generate', {method: 'POST'});
-let data = await res.json();
-if (data.success) {
-loadInvites();
-} else {
-alert("생성 실패");
-}
-}
+    async function generateInvite() {
+        let res = await fetch('/api/secret/invite/generate', {method: 'POST'});
+        let data = await res.json();
+        if (data.success) {
+            loadInvites();
+        } else {
+            alert("생성 실패");
+        }
+    }
 
-async function loadInvites() {
-let res = await fetch('/api/secret/invite/list');
-if (res.ok) {
-let invites = await res.json();
-let table = document.getElementById('inviteTable');
-table.innerHTML = '';
-invites.forEach(i => {
-table.innerHTML += <tr&gt; &lt;td&gt;&lt;code&gt;${i.code}</code></td>
-<td>${i.used ? '&lt;span style="color:#ef4444;"&gt;사용됨&lt;/span&gt;' : '&lt;span style="color:#10b981;"&gt;사용 가능&lt;/span&gt;'}&lt;/td&gt; &lt;/tr>;
-});
-}
-}
+    async function loadInvites() {
+        let res = await fetch('/api/secret/invite/list');
+        if (res.ok) {
+            let invites = await res.json();
+            let table = document.getElementById('inviteTable');
+            table.innerHTML = '';
+            invites.forEach(i => {
+                table.innerHTML += `<tr>
+                    <td><code>${i.code}</code></td>
+                    <td>${i.used ? '<span style="color:#ef4444;">사용됨</span>' : '<span style="color:#10b981;">사용 가능</span>'}</td>
+                </tr>`;
+            });
+        }
+    }
 </script>
 
 </body>
