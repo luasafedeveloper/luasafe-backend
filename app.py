@@ -18,9 +18,9 @@ app.config.from_object(Config)
 db.init_app(app)
 
 # ------------------------------------------------------------------
-# [보안 설정 & 덤퍼 방어 구성]
-# 1. 서버와 클라이언트가 공유하는 보안 시크릿 키
-# 2. Replay Attack 방지용 요청 유효 시간 (10초로 강화)
+# [보안 설정 및 덤퍼 방어 구성]
+# 1. 서버와 클라이언트가 공유하는 보안 비밀키
+# 2. Replay Attack 방지용 요청 유효 시간 (10초)
 # 3. Nonce 중복 사용 체크 메모리 저장소
 # ------------------------------------------------------------------
 KEY_IPS = {}
@@ -54,7 +54,7 @@ def verify_flask_hmac_and_nonce(body: bytes) -> bool:
     if not timestamp or not nonce or not client_signature:
         return False
 
-    # 1. Timestamp 유효성 체크 (10초 경과된 오래된 요청 / 덤프 재전송 차단)[span_0](start_span)[span_0](end_span)
+    # 1. Timestamp 유효성 체크
     try:
         req_time = float(timestamp)
         if abs(time.time() - req_time) > REQUEST_TIMEOUT_SECONDS:
@@ -62,11 +62,11 @@ def verify_flask_hmac_and_nonce(body: bytes) -> bool:
     except ValueError:
         return False
 
-    # 2. Nonce 중복 사용 체크 (동일한 요청 재전송 차단)[span_1](start_span)[span_1](end_span)
+    # 2. Nonce 중복 사용 체크
     if nonce in USED_NONCES:
         return False
 
-    # 3. HMAC-SHA256 서명 생성 및 타이밍 공격 방지 비교 검증[span_2](start_span)[span_2](end_span)
+    # 3. HMAC-SHA256 서명 검증
     message = f"{timestamp}.{nonce}.".encode('utf-8') + body
     expected_signature = hmac.new(
         SHARED_SECRET_KEY, message, hashlib.sha256
@@ -75,7 +75,7 @@ def verify_flask_hmac_and_nonce(body: bytes) -> bool:
     if not hmac.compare_digest(expected_signature, client_signature):
         return False
 
-    # 사용된 Nonce 기록 (재사용 금지)[span_3](start_span)[span_3](end_span)
+    # 사용된 Nonce 기록
     USED_NONCES[nonce] = req_time
     return True
 
@@ -193,9 +193,13 @@ local message = timestamp .. "." .. nonce .. "." .. payloadJson
 local signature = ""
 if crypt and crypt.hmac then
     local raw_sig = crypt.hmac(message, "your_super_secret_app_key_998877", "sha256")
-    signature = (raw_sig:gsub('.', function(c)
-        return string.format('%02x', c:byte())
-    end))
+    if type(raw_sig) == "string" then
+        signature = (raw_sig:gsub('.', function(c)
+            return string.format('%02x', c:byte())
+        end))
+    else
+        signature = tostring(raw_sig)
+    end
 else
     return nil
 end
@@ -223,7 +227,6 @@ end;"""
 
     try:
         body_bytes = request.get_data()
-        # 💡 HMAC 서명, 타임스탬프, Nonce 검증을 통과하지 못하면 즉시 킥 차단 (덤퍼/변조 원천 방지)
         if not verify_flask_hmac_and_nonce(body_bytes):
             return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Security Error: Invalid Signature or Expired Request.");', 401
 
@@ -288,7 +291,7 @@ def dev_register():
 
     invite = InviteCode.query.filter_by(code=invite_code, used=False).first()
     if not invite:
-        return jsonify({'success': False, 'message': '유효하지 않거나 이미 사용된 라이센스 코드입니다.'}), 400
+        return jsonify({'success': False, 'message': '유효하지 않거나 이미 사용된 라이센스입니다.'}), 400
 
     if User.query.filter_by(username=username).first():
         return jsonify({'success': False, 'message': '이미 존재하는 아이디입니다.'}), 400
