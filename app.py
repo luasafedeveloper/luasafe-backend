@@ -193,10 +193,12 @@ local message = timestamp .. "." .. nonce .. "." .. payloadJson
 local signature = ""
 if crypt and crypt.hmac then
     local raw_sig = crypt.hmac(message, "your_super_secret_app_key_998877", "sha256")
-    if type(raw_sig) == "string" then
-        signature = (raw_sig:gsub('.', function(c)
-            return string.format('%02x', c:byte())
-        end))
+    if type(raw_sig) == "table" or typeof(raw_sig) == "buffer" then
+        local hexChars = {}
+        for i = 1, #raw_sig do
+            table.insert(hexChars, string.format("%02x", raw_sig:byte(i) or raw_sig[i]))
+        end
+        signature = table.concat(hexChars)
     else
         signature = tostring(raw_sig)
     end
