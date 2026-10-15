@@ -20,7 +20,7 @@ db.init_app(app)
 # 서버 메모리 기반 IP 저장소 및 보안 설정
 KEY_IPS = {}
 SHARED_SECRET_KEY = b"your_super_secret_app_key_998877"  # 클라이언트와 공유할 비밀키
-REQUEST_TIMEOUT_SECONDS = 10
+REQUEST_TIMEOUT_SECONDS = 300  # 시간 오차 방지를 위해 5분으로 넉넉하게 설정
 USED_NONCES: Dict[str, float] = {}
 
 with app.app_context():
@@ -49,7 +49,7 @@ def verify_flask_hmac_and_nonce(body: bytes) -> bool:
     if not timestamp or not nonce or not client_signature:
         return False
 
-    # 1. Timestamp 유효성 체크 (10초 초과 요청 차단)
+    # 1. Timestamp 유효성 체크
     try:
         req_time = float(timestamp)
         if abs(time.time() - req_time) > REQUEST_TIMEOUT_SECONDS:
@@ -57,7 +57,7 @@ def verify_flask_hmac_and_nonce(body: bytes) -> bool:
     except ValueError:
         return False
 
-    # 2. Nonce 중복 사용 체크 (재전송 공격 방어)
+    # 2. Nonce 중복 사용 체크
     if nonce in USED_NONCES:
         return False
 
@@ -172,6 +172,7 @@ end)"""
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
     if request.method == 'GET':
+        # 💡 Lua 클라이언트 쪽에서 바이너리 서명을 헥스(Hex)로 변환하도록 수정됨
         lua_payload = """local s, r = pcall(function()
 local userKey = Scriptkey or scriptkey or ""
 local hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())
@@ -187,7 +188,10 @@ end
 local message = timestamp .. "." .. nonce .. "." .. payloadJson
 local signature = ""
 if crypt and crypt.hmac then
-    signature = crypt.hmac(message, "your_super_secret_app_key_998877", "sha256")
+    local raw_sig = crypt.hmac(message, "your_super_secret_app_key_998877", "sha256")
+    signature = (raw_sig:gsub('.', function(c)
+        return string.format('%02x', c:byte())
+    end))
 else
     return nil
 end
