@@ -6,6 +6,7 @@ import hmac
 import os
 import random
 import string
+import time
 from typing import Dict
 from config import Config
 from flask import Flask, jsonify, render_template, request, session
@@ -18,7 +19,7 @@ db.init_app(app)
 
 # 서버 메모리 기반 IP 저장소 및 보안 설정
 KEY_IPS = {}
-SHARED_SECRET_KEY = b"your_super_secret_app_key_998877"  # 클라이언트와 공유할 비밀키 (원하시는 값으로 변경 가능)
+SHARED_SECRET_KEY = b"your_super_secret_app_key_998877"  # 클라이언트와 공유할 비밀키
 REQUEST_TIMEOUT_SECONDS = 10
 USED_NONCES: Dict[str, float] = {}
 
@@ -171,7 +172,6 @@ end)"""
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
     if request.method == 'GET':
-        # [클라이언트 로더 스크립트] - HMAC 서명 및 Nonce를 동적으로 생성하여 전송하도록 업그레이드
         lua_payload = """local s, r = pcall(function()
 local userKey = Scriptkey or scriptkey or ""
 local hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())
@@ -213,7 +213,6 @@ game:GetService("Players").LocalPlayer:Kick("[Luasafe] Security Auth Failed or I
 end;"""
         return lua_payload
 
-    # POST 요청 처리 (HMAC 서명 검증 추가)
     try:
         body_bytes = request.get_data()
         if not verify_flask_hmac_and_nonce(body_bytes):
