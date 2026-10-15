@@ -116,10 +116,10 @@
 
     <!-- 고급 로그인 / 회원가입 화면 -->
     <div id="authView" class="auth-container card hidden">
-        <h2 id="authTitle" style="text-align: center; margin-bottom: 24px; font-size: 22px;">🔐 Luasafe Secure Portal</h2>
+        <h2 id="authTitle" style="text-align: center; margin-bottom: 24px; font-size: 22px;">Luasafe Secure Portal</h2>
         
         <div id="registerFields" class="hidden">
-            <label>라이센스 초대 코드</label>
+            <label>라이센스</label>
             <input type="text" id="regInvite" placeholder="LUASAFE-XXXX">
         </div>
 
@@ -156,9 +156,9 @@
             <textarea id="scriptCode" placeholder="-- 루아 코드를 직접 입력하거나 파일을 업로드하세요"></textarea>
             
             <div class="button-group">
-                <button class="btn-success" onclick="saveScript()">💾 스크립트 저장 및 암호화</button>
+                <button class="btn-success" onclick="saveScript()">스크립트 저장 및 암호화</button>
                 <label class="btn-file">
-                    📁 파일 업로드
+                    파일 업로드
                     <input type="file" id="scriptFile" accept=".lua,.txt" style="display: none;" onchange="handleFileSelect(event)">
                 </label>
             </div>
@@ -227,12 +227,12 @@
     function toggleAuthMode() {
         isRegisterMode = !isRegisterMode;
         if (isRegisterMode) {
-            document.getElementById('authTitle').innerText = '📝 Luasafe 회원가입';
+            document.getElementById('authTitle').innerText = 'Luasafe 회원가입';
             document.getElementById('authBtn').innerText = '가입 완료하기';
             document.getElementById('registerFields').classList.remove('hidden');
             document.getElementById('authToggleText').innerText = '이미 계정이 있으신가요? 로그인';
         } else {
-            document.getElementById('authTitle').innerText = '🔐 Luasafe Secure Portal';
+            document.getElementById('authTitle').innerText = 'Luasafe Secure Portal';
             document.getElementById('authBtn').innerText = '로그인';
             document.getElementById('registerFields').classList.add('hidden');
             document.getElementById('authToggleText').innerText = '계정이 없으신가요? 회원가입';
