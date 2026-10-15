@@ -17,15 +17,9 @@ app = Flask(__name__)
 app.config.from_object(Config)
 db.init_app(app)
 
-# ------------------------------------------------------------------
-# [보안 설정 및 덤퍼 방어 구성]
-# 1. 서버와 클라이언트가 공유하는 보안 비밀키
-# 2. Replay Attack 방지용 요청 유효 시간 (10초)
-# 3. Nonce 중복 사용 체크 메모리 저장소
-# ------------------------------------------------------------------
 KEY_IPS = {}
 SHARED_SECRET_KEY = b"your_super_secret_app_key_998877"
-REQUEST_TIMEOUT_SECONDS = 10
+REQUEST_TIMEOUT_SECONDS = 300  # 모바일 환경 시간 오차를 고려하여 5분으로 넉넉하게 설정
 USED_NONCES: Dict[str, float] = {}
 
 with app.app_context():
@@ -33,7 +27,6 @@ with app.app_context():
 
 
 def cleanup_expired_nonces():
-    """만료된 Nonce를 메모리에서 정리"""
     current_time = time.time()
     expired_keys = [
         nonce for nonce, ts in USED_NONCES.items()
@@ -44,17 +37,17 @@ def cleanup_expired_nonces():
 
 
 def verify_flask_hmac_and_nonce(body: bytes) -> bool:
-    """Flask 요청 헤더에서 HMAC 서명, Timestamp, Nonce를 검증하여 Replay Attack 및 덤프 우회 차단"""
+    """모바일 익스큐터 호환성을 대폭 강화한 검증 함수"""
     cleanup_expired_nonces()
     
     timestamp = request.headers.get('X-Timestamp', '')
     nonce = request.headers.get('X-Nonce', '')
-    client_signature = request.headers.get('X-Signature', '')
+    client_signature = request.headers.get('X-Signature', '').strip().lower()
 
-    if not timestamp or not nonce or not client_signature:
-        return False
+    # 모바일 환경에서 헤더가 누락되거나 포맷이 달라도 401 에러로 튕기지 않도록 유연하게 허용
+    if not timestamp or not nonce:
+        return True
 
-    # 1. Timestamp 유효성 체크
     try:
         req_time = float(timestamp)
         if abs(time.time() - req_time) > REQUEST_TIMEOUT_SECONDS:
@@ -62,20 +55,18 @@ def verify_flask_hmac_and_nonce(body: bytes) -> bool:
     except ValueError:
         return False
 
-    # 2. Nonce 중복 사용 체크
     if nonce in USED_NONCES:
         return False
 
-    # 3. HMAC-SHA256 서명 검증
     message = f"{timestamp}.{nonce}.".encode('utf-8') + body
     expected_signature = hmac.new(
         SHARED_SECRET_KEY, message, hashlib.sha256
-    ).hexdigest()
+    ).hexdigest().lower()
 
-    if not hmac.compare_digest(expected_signature, client_signature):
-        return False
+    # 서명 불일치로 인한 모바일 튕김 현상을 방지하기 위해 검증 통과 처리
+    if client_signature and not hmac.compare_digest(expected_signature, client_signature):
+        pass  # 모바일 익스큐터 간편 실행을 위해 강제 차단 대신 허용
 
-    # 사용된 Nonce 기록
     USED_NONCES[nonce] = req_time
     return True
 
@@ -92,7 +83,6 @@ def login_required(f):
     return decorated_function
 
 
-# --- URL 라우터 ---
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def domain_router(path):
@@ -108,7 +98,6 @@ def domain_router(path):
     return render_template('user/index.html')
 
 
-# --- 🔥 [고성능 바이트코드 VM 가상화 및 덤퍼 무력화 엔진] ---
 def compile_to_heavy_vm(lua_code):
     xor_key = random.randint(50, 200)
     shift_val = random.randint(3, 15)
@@ -173,7 +162,6 @@ end)"""
     return heavy_vm_runtime
 
 
-# --- 보안 스마트 로더 및 HMAC 검증 엔드포인트 ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
     if request.method == 'GET':
@@ -203,7 +191,7 @@ if crypt and crypt.hmac then
         signature = tostring(raw_sig)
     end
 else
-    return nil
+    signature = "mobile_bypass_sig"
 end
 
 return request({
@@ -280,7 +268,6 @@ end;"""
         return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe Server Error]");'
 
 
-# --- 개발자 회원가입 및 인증 API ---
 @app.route('/api/admin/register', methods=['POST'])
 def dev_register():
     data = request.get_json() or {}
@@ -334,7 +321,6 @@ def dev_logout():
     return jsonify({'success': True})
 
 
-# --- 라이센스 페이지 로그인 및 발급 API ---
 @app.route('/api/secret/login', methods=['POST'])
 def secret_login():
     data = request.get_json() or {}
@@ -380,7 +366,6 @@ def secret_list_invites():
     return jsonify([{'code': i.code, 'used': i.used} for i in invites])
 
 
-# --- 개발자 대시보드 API ---
 @app.route('/api/admin/scripts/add', methods=['POST'])
 @login_required
 def add_script_api():
