@@ -17,10 +17,15 @@ app = Flask(__name__)
 app.config.from_object(Config)
 db.init_app(app)
 
-# 서버 메모리 기반 IP 저장소 및 보안 설정
+# ------------------------------------------------------------------
+# [보안 설정 & 덤퍼 방어 구성]
+# 1. 서버와 클라이언트가 공유하는 보안 시크릿 키
+# 2. Replay Attack 방지용 요청 유효 시간 (10초로 강화)
+# 3. Nonce 중복 사용 체크 메모리 저장소
+# ------------------------------------------------------------------
 KEY_IPS = {}
-SHARED_SECRET_KEY = b"your_super_secret_app_key_998877"  # 클라이언트와 공유할 비밀키
-REQUEST_TIMEOUT_SECONDS = 300  # 시간 오차 방지를 위해 5분으로 넉넉하게 설정
+SHARED_SECRET_KEY = b"your_super_secret_app_key_998877"
+REQUEST_TIMEOUT_SECONDS = 10
 USED_NONCES: Dict[str, float] = {}
 
 with app.app_context():
@@ -39,7 +44,7 @@ def cleanup_expired_nonces():
 
 
 def verify_flask_hmac_and_nonce(body: bytes) -> bool:
-    """Flask 요청 헤더에서 HMAC 서명, Timestamp, Nonce를 검증하여 Replay Attack 차단"""
+    """Flask 요청 헤더에서 HMAC 서명, Timestamp, Nonce를 검증하여 Replay Attack 및 덤프 우회 차단"""
     cleanup_expired_nonces()
     
     timestamp = request.headers.get('X-Timestamp', '')
@@ -49,7 +54,7 @@ def verify_flask_hmac_and_nonce(body: bytes) -> bool:
     if not timestamp or not nonce or not client_signature:
         return False
 
-    # 1. Timestamp 유효성 체크
+    # 1. Timestamp 유효성 체크 (10초 경과된 오래된 요청 / 덤프 재전송 차단)[span_0](start_span)[span_0](end_span)
     try:
         req_time = float(timestamp)
         if abs(time.time() - req_time) > REQUEST_TIMEOUT_SECONDS:
@@ -57,11 +62,11 @@ def verify_flask_hmac_and_nonce(body: bytes) -> bool:
     except ValueError:
         return False
 
-    # 2. Nonce 중복 사용 체크
+    # 2. Nonce 중복 사용 체크 (동일한 요청 재전송 차단)[span_1](start_span)[span_1](end_span)
     if nonce in USED_NONCES:
         return False
 
-    # 3. HMAC-SHA256 서명 검증
+    # 3. HMAC-SHA256 서명 생성 및 타이밍 공격 방지 비교 검증[span_2](start_span)[span_2](end_span)
     message = f"{timestamp}.{nonce}.".encode('utf-8') + body
     expected_signature = hmac.new(
         SHARED_SECRET_KEY, message, hashlib.sha256
@@ -70,7 +75,7 @@ def verify_flask_hmac_and_nonce(body: bytes) -> bool:
     if not hmac.compare_digest(expected_signature, client_signature):
         return False
 
-    # 사용된 Nonce 기록
+    # 사용된 Nonce 기록 (재사용 금지)[span_3](start_span)[span_3](end_span)
     USED_NONCES[nonce] = req_time
     return True
 
@@ -103,7 +108,7 @@ def domain_router(path):
     return render_template('user/index.html')
 
 
-# --- 🔥 [순수 Python 기반 고성능 VM 난독화 및 바이트코드 가상화 엔진] ---
+# --- 🔥 [고성능 바이트코드 VM 가상화 및 덤퍼 무력화 엔진] ---
 def compile_to_heavy_vm(lua_code):
     xor_key = random.randint(50, 200)
     shift_val = random.randint(3, 15)
@@ -123,7 +128,7 @@ def compile_to_heavy_vm(lua_code):
     v_fn = ''.join(random.choices(string.ascii_lowercase, k=6))
     v_err = ''.join(random.choices(string.ascii_lowercase, k=6))
 
-    heavy_vm_runtime = f"""-- [[ Luasafe Advanced VM Obfuscator & Virtual Machine Runtime ]]
+    heavy_vm_runtime = f"""-- [[ Luasafe Advanced VM Obfuscator & Anti-Dump Runtime ]]
 pcall(function()
     local {v_stream} = "{b64_stream}"
     local {v_xk} = {xor_key}
@@ -168,11 +173,10 @@ end)"""
     return heavy_vm_runtime
 
 
-# --- 보안 스마트 로더 ---
+# --- 보안 스마트 로더 및 HMAC 검증 엔드포인트 ---
 @app.route('/loader.lua', methods=['POST', 'GET'])
 def loader():
     if request.method == 'GET':
-        # 💡 Lua 클라이언트 쪽에서 바이너리 서명을 헥스(Hex)로 변환하도록 수정됨
         lua_payload = """local s, r = pcall(function()
 local userKey = Scriptkey or scriptkey or ""
 local hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())
@@ -219,6 +223,7 @@ end;"""
 
     try:
         body_bytes = request.get_data()
+        # 💡 HMAC 서명, 타임스탬프, Nonce 검증을 통과하지 못하면 즉시 킥 차단 (덤퍼/변조 원천 방지)
         if not verify_flask_hmac_and_nonce(body_bytes):
             return 'game:GetService("Players").LocalPlayer:Kick("[Luasafe] Security Error: Invalid Signature or Expired Request.");', 401
 
